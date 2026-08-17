@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Blip</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#161225">
+<style>
+  :root{
+    --bg-deep:#161225; --bg-panel:#211a35; --lav:#8b7fd6; --lav-soft:#4f4680;
+    --mint:#7fe0c4; --coral:#ff9466; --fog:#c9c3e6; --ink:#0e0b18;
+    --wander-speed:4.5s;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:#000;color:var(--fog);
+    font-family:'Segoe UI Rounded','SF Pro Rounded',system-ui,sans-serif;overflow:hidden;
+    -webkit-user-select:none;user-select:none;}
+
+  /* ---- start overlay (needed: fullscreen/orientation/mic all require a user gesture) ---- */
+  #startOverlay{position:fixed;inset:0;background:#0f0c1a;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:18px;z-index:20;}
+  #startBtn{width:120px;height:120px;border-radius:50%;border:none;
+    background:radial-gradient(circle at 35% 30%,#a99bf0,var(--lav-soft));font-size:15px;font-weight:600;
+    color:#161225;cursor:pointer;}
+  #startOverlay p{font-size:13px;color:var(--lav);max-width:260px;text-align:center;}
+
+  #stage{display:none;position:relative;height:100%;width:100%;
+    background:radial-gradient(140% 160% at 10% -10%, #241c3d 0%, var(--bg-deep) 55%, #0f0c1a 100%);}
+  #stage.sleeping{filter:brightness(.5);transition:filter 2.5s ease;}
+
+  #greetBox{position:absolute;top:20px;right:26px;text-align:right;z-index:3;}
+  #greetBox #idleText{font-size:12px;color:var(--lav);opacity:.9;}
+  #greetBox #idleTime{font-size:22px;font-weight:600;color:var(--fog);letter-spacing:.02em;}
+
+  #faceCol{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    transition:top var(--wander-speed) ease, left var(--wander-speed) ease, transform .6s ease;
+    display:flex;align-items:center;justify-content:center;}
+  #stage.active #faceCol{top:50%;left:130px;transform:translate(-50%,-50%);transition:top .7s ease, left .7s ease, transform .6s ease;}
+  #blob{position:relative;width:min(30vh,220px);height:min(30vh,220px);
+    background:linear-gradient(160deg,var(--lav) 0%, var(--lav-soft) 70%);
+    border-radius:42% 58% 63% 37% / 41% 44% 56% 59%;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 60px -10px rgba(139,127,214,.55), inset 0 -20px 40px rgba(0,0,0,.25);
+    animation:breathe 4.2s ease-in-out infinite, morph 9s ease-in-out infinite;
+    transition:background .6s ease;}
+  @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+  @keyframes morph{0%{border-radius:42% 58% 63% 37% / 41% 44% 56% 59%}
+    50%{border-radius:58% 42% 40% 60% / 55% 60% 40% 45%}
+    100%{border-radius:42% 58% 63% 37% / 41% 44% 56% 59%}}
+  #face{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  #eyes{display:flex;gap:26px;}
+  .eye{width:20px;height:26px;background:var(--ink);border-radius:50%;transition:transform .3s ease;
+    animation:blink 4.5s infinite;}
+  @keyframes blink{0%,92%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}96%{transform:scaleY(1)}}
+  #mouth{width:34px;height:10px;border-radius:0 0 20px 20px;background:var(--ink);transition:all .18s ease;}
+
+  #blob.listening{background:linear-gradient(160deg,var(--mint) 0%, #3c8f7c 70%);}
+  #blob.thinking #mouth{width:14px;height:14px;border-radius:50%;}
+  #blob.happy{background:linear-gradient(160deg,var(--coral) 0%, #b85f3d 70%);}
+  #blob.happy #mouth{width:40px;height:20px;border-radius:0 0 30px 30px;}
+  #blob.confused .eye:first-child{transform:translateY(-4px)}
+  #blob[data-mood="sleepy"] .eye{width:16px;height:8px;background:transparent;border-top:3px solid var(--ink);
+    border-radius:50% 50% 0 0;animation:none;}
+  #blob[data-mood="sleepy"] #mouth{width:12px;height:6px;background:transparent;border-bottom:3px solid var(--ink);
+    border-radius:0 0 50% 50%;}
+  #blob[data-mood="sleepy"] #face{animation:sleepBob 3s ease-in-out infinite;}
+  @keyframes sleepBob{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(3px) rotate(-3deg)}}
+  .zzz{position:absolute;top:2px;right:10px;font-size:13px;font-weight:600;color:var(--fog);opacity:0;
+    animation:zzzFloat 2.6s ease-out forwards;pointer-events:none;}
+  @keyframes zzzFloat{0%{opacity:0;transform:translate(0,0) scale(.6)}20%{opacity:.85}
+    100%{opacity:0;transform:translate(14px,-34px) scale(1.15)}}
+  #blob[data-mood="curious"] #face{transform:translateX(6px) rotate(-5deg);}
+  #blob[data-mood="curious"] .eye:first-child{transform:translateY(-4px);}
+  #blob[data-mood="content"] #mouth{width:30px;border-radius:0 0 16px 16px;}
+  #blob[data-mood="alert"] .eye{transform:scaleY(1.35) scaleX(1.15);}
+  #blob[data-mood="alert"] #mouth{width:14px;height:14px;border-radius:50%;}
+  #blob[data-mood="laughing"] .eye{transform:scaleY(.25) translateY(-2px);}
+  #blob[data-mood="laughing"] #mouth{width:38px;height:18px;border-radius:0 0 26px 26px;}
+  #blob[data-mood="wondering"] .eye:first-child{transform:translateY(-6px) rotate(-10deg);}
+  #blob[data-mood="wondering"] .eye:last-child{transform:translateY(3px);}
+  #blob[data-mood="wondering"] #mouth{width:18px;height:8px;border-radius:40% 60% 60% 40%;transform:rotate(8deg);}
+  #blob[data-mood="lookaround"] #eyes{animation:lookSide 2.2s ease-in-out infinite;}
+  @keyframes lookSide{0%,100%{transform:translateX(0)}30%{transform:translateX(5px)}70%{transform:translateX(-5px)}}
+
+  #infoCol{position:absolute;top:50%;left:280px;right:60px;transform:translateY(-50%);
+    display:none;flex-direction:column;justify-content:center;gap:12px;min-width:0;}
+  #stage.active #infoCol{display:flex;}
+  #activeBox{display:flex;flex-direction:column;gap:10px;max-width:100%;}
+  #status{font-size:13px;color:var(--lav);}
+  #bubble{padding:10px 16px;border-radius:18px;background:var(--bg-panel);border:1px solid var(--lav-soft);
+    font-size:14.5px;line-height:1.4;color:#eae7fb;display:none;}
+  #linkRow{display:none;}
+  #linkRow a{font-size:13px;color:var(--mint);text-decoration:none;border:1px solid var(--lav-soft);
+    padding:6px 12px;border-radius:10px;}
+
+  /* side drawer for mic + settings, hidden behind a translucent arrow */
+  #drawerTab{position:fixed;top:50%;right:0;transform:translateY(-50%);width:26px;height:64px;
+    background:rgba(139,127,214,.18);border:1px solid rgba(139,127,214,.35);border-right:none;
+    border-radius:14px 0 0 14px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;}
+  #drawerTab svg{color:var(--fog);width:16px;height:16px;display:block;transition:transform .25s ease;}
+  #drawer{position:fixed;top:0;right:-140px;height:100%;width:140px;background:rgba(22,18,37,.92);
+    border-left:1px solid var(--lav-soft);display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:22px;transition:right .28s ease;z-index:4;}
+  #drawer.open{right:0;}
+  #drawerTab.open svg{transform:rotate(180deg);}
+  #micBtn,#gearBtn{width:56px;height:56px;border-radius:50%;border:none;display:flex;align-items:center;
+    justify-content:center;cursor:pointer;}
+  #micBtn{background:radial-gradient(circle at 35% 30%,#a99bf0,var(--lav-soft));}
+  #micBtn.on{background:radial-gradient(circle at 35% 30%,#9df0d9,#3c8f7c);}
+  #gearBtn{background:var(--bg-panel);border:1px solid var(--lav-soft);}
+  #micBtn svg,#gearBtn svg{width:22px;height:22px;color:#161225;}
+  #gearBtn svg{color:var(--fog);}
+  #wakeHint{position:absolute;bottom:10px;left:26px;font-size:10px;color:#59547c;}
+
+  #modal{position:fixed;inset:0;background:rgba(10,8,18,.72);display:none;align-items:center;justify-content:center;z-index:10;}
+  #modalCard{width:min(70vw,360px);background:var(--bg-panel);border:1px solid var(--lav-soft);border-radius:20px;padding:22px;}
+  #modalCard h2{margin:0 0 14px;font-size:16px;color:var(--fog);}
+  #modalCard label{font-size:12px;color:var(--lav);display:block;margin:12px 0 6px;}
+  #modalCard input,#modalCard textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);
+    background:var(--ink);color:#eae7fb;font-size:14px;}
+  #modalCard textarea{resize:none;height:60px;font-family:inherit;}
+  #wakeToggleRow{display:flex;align-items:center;justify-content:space-between;margin-top:14px;}
+  #modalBtns{display:flex;gap:10px;margin-top:18px;}
+  #modalBtns button{flex:1;padding:10px;border-radius:10px;border:none;font-weight:600;cursor:pointer;}
+  #saveBtn{background:var(--lav);color:#161225;}
+  #closeBtn{background:transparent;color:var(--fog);border:1px solid var(--lav-soft) !important;}
+  #note{font-size:11px;color:#8a84ab;margin-top:10px;line-height:1.4;}
+</style>
+</head>
+<body>
+
+<div id="startOverlay">
+  <button id="startBtn" onclick="wakeUp()">tap to<br>wake Blip</button>
+  <p>This opens fullscreen, locks landscape, keeps the screen awake, and asks for mic access — Android needs a tap for all of that.</p>
+</div>
+
+<div id="stage">
+  <div id="faceCol">
+    <div id="blob" data-mood="content">
+      <div id="face">
+        <div id="eyes"><div class="eye"></div><div class="eye"></div></div>
+        <div id="mouth"></div>
+      </div>
+    </div>
+  </div>
+  <div id="infoCol">
+    <div id="activeBox">
+      <div id="status"></div>
+      <div id="bubble"></div>
+      <div id="linkRow"><a id="linkAnchor" href="#" target="_blank" rel="noopener">open it ↗</a></div>
+    </div>
+  </div>
+  <div id="greetBox">
+    <div id="idleText">good day</div>
+    <div id="idleTime">--:--</div>
+  </div>
+  <div id="wakeHint">say "hey blip" to talk</div>
+</div>
+
+<div id="drawerTab" onclick="toggleDrawer()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+</div>
+<div id="drawer">
+  <button id="micBtn" onclick="manualListen()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+  </button>
+  <button id="gearBtn" onclick="openSettings()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+  </button>
+</div>
+
+<div id="modal">
+  <div id="modalCard">
+    <h2>Blip settings</h2>
+    <label>Gemini API key</label>
+    <input id="apiKeyInput" type="password" placeholder="AIza...">
+    <label>Personality (system instruction)</label>
+    <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Keep replies under 3 short sentences, warm and a little playful. If the user asks you to open, show, or take them to something, include a "link" field with the best matching URL (use https://gemini.google.com/app for general Gemini requests). Otherwise link must be null.</textarea>
+    <div id="wakeToggleRow">
+      <span style="font-size:13px;">Always-listen for "hey blip"</span>
+      <input type="checkbox" id="wakeToggle" checked style="width:20px;height:20px;">
+    </div>
+    <label>Stay in one spot (seconds): <span id="stationaryOut">6</span></label>
+    <input id="stationaryInput" type="range" min="2" max="20" step="1" value="6" style="width:100%;">
+    <label>Glide speed (seconds to move): <span id="paceOut">4.5</span></label>
+    <input id="paceInput" type="range" min="1" max="10" step="0.5" value="4.5" style="width:100%;">
+    <label style="margin-top:14px;">Expression durations (seconds)</label>
+    <div id="moodSliders" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div id="modalBtns">
+      <button id="closeBtn" onclick="closeSettings()">Cancel</button>
+      <button id="saveBtn" onclick="saveSettings()">Save &amp; close</button>
+    </div>
+    <div id="note">The key stays in memory only for this session. See the comment near the top of the script for adding localStorage once you deploy this yourself.</div>
+  </div>
+</div>
+<script>
+document.getElementById('stationaryInput').addEventListener('input', e => document.getElementById('stationaryOut').textContent = e.target.value);
+document.getElementById('paceInput').addEventListener('input', e => document.getElementById('paceOut').textContent = e.target.value);
+</script>
+
+<script>
+let CONFIG = { apiKey:'', persona: document.getElementById('personaInput').value, wakeEnabled:true,
+  stationarySecs:6, paceSecs:4.5,
+  moodDurations:{curious:4, content:5, alert:3, laughing:3, wondering:4, lookaround:4} };
+/* To persist the key across visits once this runs on its own domain (not inside
+   Claude's artifact preview), add in saveSettings(): localStorage.setItem('blip_key', val)
+   and on load: CONFIG.apiKey = localStorage.getItem('blip_key') || ''. Left out by
+   default since storage APIs aren't reliable inside the preview sandbox. */
+
+const MOOD_LIST = Object.keys(CONFIG.moodDurations);
+const moodSlidersBox = document.getElementById('moodSliders');
+MOOD_LIST.forEach(m => {
+  const row = document.createElement('div');
+  row.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--fog);">
+      <span style="text-transform:capitalize;">${m}</span><span id="moodOut_${m}">${CONFIG.moodDurations[m]}</span></div>
+    <input id="moodInput_${m}" type="range" min="1" max="15" step="0.5" value="${CONFIG.moodDurations[m]}" style="width:100%;">`;
+  moodSlidersBox.appendChild(row);
+  row.querySelector('input').addEventListener('input', e => {
+    document.getElementById(`moodOut_${m}`).textContent = e.target.value;
+  });
+});
+const stage=document.getElementById('stage'), startOverlay=document.getElementById('startOverlay');
+const blob=document.getElementById('blob'), mouth=document.getElementById('mouth'), faceCol=document.getElementById('faceCol');
+const activeBox=document.getElementById('activeBox');
+const idleText=document.getElementById('idleText'), idleTime=document.getElementById('idleTime');
+const statusEl=document.getElementById('status'), bubble=document.getElementById('bubble');
+const linkRow=document.getElementById('linkRow'), linkAnchor=document.getElementById('linkAnchor');
+const micBtn=document.getElementById('micBtn'), drawer=document.getElementById('drawer'), drawerTab=document.getElementById('drawerTab');
+
+const USER_NAME='Vamsi';
+let appState='idle'; // idle | listening | thinking | speaking
+let hideActiveTimer=null;
+
+function setFace(s){ blob.className = s; }
+
+function showIdle(){
+  appState='idle';
+  stage.classList.remove('active');
+  bubble.style.display='none';
+  linkRow.style.display='none';
+  setFace('');
+  startAmbient();
+  startFloating();
+}
+function showActive(){
+  appState='active';
+  markInteraction();
+  stage.classList.add('active');
+  stopAmbient();
+  stopFloating();
+  clearTimeout(hideActiveTimer);
+}
+
+/* ---- clock + personalized greeting (always visible, top-right) ---- */
+function tickClock(){
+  const now=new Date();
+  const h=now.getHours();
+  const greeting = h<12 ? 'good morning' : h<17 ? 'good afternoon' : h<21 ? 'good evening' : 'still up?';
+  idleText.textContent = `${greeting}, ${USER_NAME}!`;
+  idleTime.textContent = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+setInterval(tickClock, 15000);
+
+/* ---- ambient idle mood cycling (msg-sphere style) — sleepy is reserved for real inactivity, not this pool ---- */
+let ambientTimeout=null, lastMood=null;
+function scheduleMood(){
+  if(appState!=='idle' || sleeping) return;
+  let pool = MOOD_LIST.filter(m => m !== lastMood);
+  if(pool.length===0) pool = MOOD_LIST;
+  const next = pool[Math.floor(Math.random()*pool.length)];
+  lastMood = next;
+  blob.dataset.mood = next;
+  const dur = (CONFIG.moodDurations[next] || 4) * 1000;
+  ambientTimeout = setTimeout(scheduleMood, dur);
+}
+function startAmbient(){ clearTimeout(ambientTimeout); scheduleMood(); }
+function stopAmbient(){ clearTimeout(ambientTimeout); }
+
+/* ---- idle: let the blob drift around the open screen space ---- */
+let floatTimer=null;
+function startFloating(){
+  clearInterval(floatTimer);
+  const wander=()=>{
+    if(appState!=='idle') return;
+    const top = 30 + Math.random()*40;   // % of screen height, keeps clear of clock/drawer
+    const left = 25 + Math.random()*50;  // % of screen width
+    faceCol.style.top = top+'%';
+    faceCol.style.left = left+'%';
+  };
+  wander();
+  floatTimer=setInterval(wander, CONFIG.stationarySecs*1000);
+}
+function stopFloating(){ clearInterval(floatTimer); faceCol.style.top=''; faceCol.style.left=''; }
+
+/* ---- sleep on inactivity: dims the screen and switches to a calmer expression to save power ---- */
+let lastInteraction=Date.now(), sleeping=false, zzzTimer=null;
+function markInteraction(){
+  lastInteraction=Date.now();
+  if(sleeping) exitSleep();
+}
+function spawnZzz(){
+  if(!sleeping) return;
+  const z=document.createElement('div');
+  z.className='zzz'; z.textContent='z';
+  blob.appendChild(z);
+  setTimeout(()=>z.remove(), 2600);
+}
+function enterSleep(){
+  sleeping=true;
+  stage.classList.add('sleeping');
+  stopAmbient();
+  blob.dataset.mood='sleepy';
+  stopFloating();
+  zzzTimer=setInterval(spawnZzz, 2200);
+  spawnZzz();
+}
+function exitSleep(){
+  sleeping=false;
+  stage.classList.remove('sleeping');
+  clearInterval(zzzTimer);
+  if(appState==='idle'){ startAmbient(); startFloating(); }
+}
+setInterval(()=>{
+  if(appState==='idle' && !sleeping && Date.now()-lastInteraction > 120000) enterSleep();
+}, 10000);
+
+/* ---- speaking ---- */
+function say(text, emotion, link){
+  showActive();
+  bubble.style.display='block'; bubble.textContent=text;
+  statusEl.textContent='';
+  setFace(emotion==='confused' ? 'confused' : 'happy');
+  if(link){ linkAnchor.href=link; linkRow.style.display='block'; } else { linkRow.style.display='none'; }
+
+  const utter=new SpeechSynthesisUtterance(text);
+  utter.rate=1.02; utter.pitch=1.15;
+  let mouthTimer=setInterval(()=>{ mouth.style.height = mouth.style.height==='20px' ? '10px':'20px'; }, 140);
+  utter.onend=()=>{
+    clearInterval(mouthTimer); mouth.style.height='10px';
+    hideActiveTimer=setTimeout(showIdle, 6000);
+  };
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utter);
+}
+
+/* ---- gemini call ---- */
+async function askGemini(userText){
+  if(!CONFIG.apiKey){ say("I need a Gemini API key — open the drawer and tap the gear.", 'confused', null); return; }
+  showActive();
+  setFace('thinking'); statusEl.textContent='thinking...'; bubble.style.display='none'; linkRow.style.display='none';
+
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`;
+  const body={
+    systemInstruction:{parts:[{text: CONFIG.persona + ' Always respond ONLY with strict JSON: {"reply": string, "emotion": "happy"|"confused", "link": string|null}. No markdown.'}]},
+    contents:[{role:'user', parts:[{text:userText}]}],
+    generationConfig:{responseMimeType:'application/json', maxOutputTokens:220}
+  };
+  try{
+    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok) throw new Error('API '+res.status);
+    const data=await res.json();
+    const raw=data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    let parsed; try{parsed=JSON.parse(raw);}catch{parsed={reply:raw,emotion:'happy',link:null};}
+    say(parsed.reply || "hmm, I've got nothing.", parsed.emotion, parsed.link);
+  }catch(err){
+    say('something went wrong talking to Gemini.', 'confused', null);
+  }
+}
+
+/* ---- speech recognition: manual tap-to-talk ---- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+function manualListen(){
+  if(!SR){ statusEl.textContent='speech recognition not supported'; return; }
+  toggleDrawer(false);
+  const r=new SR(); r.lang='en-IN'; r.interimResults=false; r.maxAlternatives=1;
+  r.onstart=()=>{ showActive(); setFace('listening'); statusEl.textContent='listening...'; };
+  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); };
+  r.onerror=()=>{ statusEl.textContent='mic error'; hideActiveTimer=setTimeout(showIdle,3000); };
+  r.start();
+}
+
+/* ---- always-listening wake phrase loop ---- */
+const WAKE_PHRASE='hey blip';
+let wakeRecog=null, wakeRunning=false;
+function startWakeLoop(){
+  if(!SR || !CONFIG.wakeEnabled) return;
+  if(wakeRunning) return;
+  wakeRecog=new SR(); wakeRecog.lang='en-IN'; wakeRecog.continuous=true; wakeRecog.interimResults=false;
+  wakeRecog.onresult=(e)=>{
+    const said=e.results[e.results.length-1][0].transcript.toLowerCase();
+    if(said.includes(WAKE_PHRASE)){
+      const remainder=said.split(WAKE_PHRASE)[1]?.trim();
+      if(remainder && remainder.length>2){ askGemini(remainder); }
+      else { manualListenAfterWake(); }
+    }
+  };
+  wakeRecog.onend=()=>{ wakeRunning=false; if(CONFIG.wakeEnabled) setTimeout(startWakeLoop, 400); };
+  wakeRecog.onerror=()=>{ wakeRunning=false; setTimeout(()=>{ if(CONFIG.wakeEnabled) startWakeLoop(); }, 1500); };
+  try{ wakeRecog.start(); wakeRunning=true; }catch(e){ wakeRunning=false; }
+}
+function stopWakeLoop(){ CONFIG.wakeEnabled=false; if(wakeRecog) wakeRecog.stop(); }
+function manualListenAfterWake(){
+  showActive(); setFace('listening'); statusEl.textContent='listening...';
+  const r=new SR(); r.lang='en-IN'; r.interimResults=false;
+  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); };
+  r.onerror=()=>{ statusEl.textContent='mic error'; hideActiveTimer=setTimeout(showIdle,3000); };
+  r.start();
+}
+
+/* ---- drawer ---- */
+function toggleDrawer(force){
+  markInteraction();
+  const open = force!==undefined ? force : !drawer.classList.contains('open');
+  drawer.classList.toggle('open', open);
+  drawerTab.classList.toggle('open', open);
+}
+
+/* ---- settings modal ---- */
+function openSettings(){
+  markInteraction();
+  document.getElementById('apiKeyInput').value=CONFIG.apiKey;
+  document.getElementById('wakeToggle').checked=CONFIG.wakeEnabled;
+  document.getElementById('stationaryInput').value=CONFIG.stationarySecs; document.getElementById('stationaryOut').textContent=CONFIG.stationarySecs;
+  document.getElementById('paceInput').value=CONFIG.paceSecs; document.getElementById('paceOut').textContent=CONFIG.paceSecs;
+  MOOD_LIST.forEach(m => {
+    document.getElementById(`moodInput_${m}`).value = CONFIG.moodDurations[m];
+    document.getElementById(`moodOut_${m}`).textContent = CONFIG.moodDurations[m];
+  });
+  document.getElementById('modal').style.display='flex';
+}
+function closeSettings(){ document.getElementById('modal').style.display='none'; }
+function saveSettings(){
+  CONFIG.apiKey=document.getElementById('apiKeyInput').value.trim();
+  CONFIG.persona=document.getElementById('personaInput').value.trim();
+  CONFIG.stationarySecs=parseFloat(document.getElementById('stationaryInput').value);
+  CONFIG.paceSecs=parseFloat(document.getElementById('paceInput').value);
+  MOOD_LIST.forEach(m => {
+    CONFIG.moodDurations[m] = parseFloat(document.getElementById(`moodInput_${m}`).value);
+  });
+  document.documentElement.style.setProperty('--wander-speed', CONFIG.paceSecs+'s');
+  const wakeOn=document.getElementById('wakeToggle').checked;
+  CONFIG.wakeEnabled=wakeOn;
+  closeSettings();
+  if(appState==='idle' && !sleeping){ startFloating(); startAmbient(); }
+  if(wakeOn) startWakeLoop(); else if(wakeRecog) wakeRecog.stop();
+}
+
+/* ---- wake lock ---- */
+let wakeLock=null;
+async function requestWakeLock(){ try{ if('wakeLock' in navigator) wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') requestWakeLock(); });
+
+/* ---- initial wake-up gesture: fullscreen + orientation + wakelock + mic permission ---- */
+async function wakeUp(){
+  markInteraction();
+  try{ await document.documentElement.requestFullscreen(); }catch(e){}
+  try{ if(screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); }catch(e){}
+  requestWakeLock();
+  startOverlay.style.display='none';
+  stage.style.display='flex';
+  tickClock();
+  showIdle();
+  if(SR){
+    try{
+      const r=new SR(); r.onstart=()=>r.stop();
+      r.start();
+    }catch(e){}
+  }
+  setTimeout(startWakeLoop, 800);
+}
+
+if('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+</script>
+</body>
+</html>
