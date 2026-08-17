@@ -423,27 +423,51 @@ async function askGemini(userText){
   showActive();
   setFace('thinking'); statusEl.textContent='thinking...'; bubble.style.display='none'; linkRow.style.display='none';
 
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`;
   const body={
     systemInstruction:{parts:[{text: CONFIG.persona + ' Always respond ONLY with strict JSON: {"reply": string, "emotion": "happy"|"confused", "link": string|null}. No markdown.'}]},
     contents:[{role:'user', parts:[{text:userText}]}],
     generationConfig:{responseMimeType:'application/json', maxOutputTokens:220}
   };
-  try{
-    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok){
-      const errBody=await res.text();
-      console.error('Gemini API error', res.status, errBody);
-      throw new Error(`API ${res.status}: ${errBody.slice(0,200)}`);
+
+  // The primary model first; if it's overloaded (503) or rate-limited (429) after
+  // a couple of quick retries, fall back to a lighter model rather than giving up.
+  const models=['gemini-3.7-flash', 'gemini-flash-latest'];
+  let lastErr=null;
+
+  for(const model of models){
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`;
+    for(let attempt=0; attempt<2; attempt++){
+      try{
+        const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        if(!res.ok){
+          const errBody=await res.text();
+          console.error('Gemini API error', res.status, errBody);
+          const err=new Error(`API ${res.status}: ${errBody.slice(0,200)}`);
+          err.status=res.status;
+          throw err;
+        }
+        const data=await res.json();
+        const raw=data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        let parsed; try{parsed=JSON.parse(raw);}catch{parsed={reply:raw,emotion:'happy',link:null};}
+        say(parsed.reply || "hmm, I've got nothing.", parsed.emotion, parsed.link);
+        return;
+      }catch(err){
+        lastErr=err;
+        if(err.status===503 || err.status===429){
+          statusEl.textContent = err.status===503 ? 'model is busy, retrying...' : 'rate limited, retrying...';
+          await new Promise(r=>setTimeout(r, 900*(attempt+1)));
+          continue; // retry same model once, then move to fallback model
+        }
+        break; // non-transient error — don't bother retrying or falling back
+      }
     }
-    const data=await res.json();
-    const raw=data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    let parsed; try{parsed=JSON.parse(raw);}catch{parsed={reply:raw,emotion:'happy',link:null};}
-    say(parsed.reply || "hmm, I've got nothing.", parsed.emotion, parsed.link);
-  }catch(err){
-    console.error('askGemini failed:', err);
-    say(`something went wrong: ${String(err.message||err).slice(0,150)}`, 'confused', null);
   }
+
+  console.error('askGemini failed after retries:', lastErr);
+  const msg = lastErr?.status===503
+    ? "Gemini's pretty busy right now — try again in a moment."
+    : `something went wrong: ${String(lastErr?.message||lastErr).slice(0,150)}`;
+  say(msg, 'confused', null);
 }
 
 /* ---- speech recognition: manual tap-to-talk ---- */
