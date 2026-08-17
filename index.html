@@ -37,7 +37,8 @@
     transition:top var(--wander-speed) ease, left var(--wander-speed) ease, transform .6s ease;
     display:flex;align-items:center;justify-content:center;}
   #stage.active #faceCol{top:50%;left:130px;transform:translate(-50%,-50%);transition:top .7s ease, left .7s ease, transform .6s ease;}
-  #blob{position:relative;width:min(30vh,220px);height:min(30vh,220px);
+  #blob{position:relative;width:min(46vh,42vw,230px);height:min(46vh,42vw,230px);
+    font-size:min(5vh,4.6vw,25px);
     background:linear-gradient(160deg,var(--lav) 0%, var(--lav-soft) 70%);
     border-radius:42% 58% 63% 37% / 41% 44% 56% 59%;
     display:flex;align-items:center;justify-content:center;
@@ -48,21 +49,21 @@
   @keyframes morph{0%{border-radius:42% 58% 63% 37% / 41% 44% 56% 59%}
     50%{border-radius:58% 42% 40% 60% / 55% 60% 40% 45%}
     100%{border-radius:42% 58% 63% 37% / 41% 44% 56% 59%}}
-  #face{display:flex;flex-direction:column;align-items:center;gap:14px;}
-  #eyes{display:flex;gap:26px;}
-  .eye{width:20px;height:26px;background:var(--ink);border-radius:50%;transition:transform .3s ease;
+  #face{display:flex;flex-direction:column;align-items:center;gap:0.4em;}
+  #eyes{display:flex;gap:0.75em;}
+  .eye{width:0.5em;height:0.65em;background:var(--ink);border-radius:50%;transition:transform .3s ease;
     animation:blink 4.5s infinite;}
   @keyframes blink{0%,92%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}96%{transform:scaleY(1)}}
-  #mouth{width:34px;height:10px;border-radius:0 0 20px 20px;background:var(--ink);transition:all .18s ease;}
+  #mouth{width:0.9em;height:0.26em;border-radius:0 0 0.55em 0.55em;background:var(--ink);transition:all .18s ease;}
 
   #blob.listening{background:linear-gradient(160deg,var(--mint) 0%, #3c8f7c 70%);}
-  #blob.thinking #mouth{width:14px;height:14px;border-radius:50%;}
+  #blob.thinking #mouth{width:0.38em;height:0.38em;border-radius:50%;}
   #blob.happy{background:linear-gradient(160deg,var(--coral) 0%, #b85f3d 70%);}
-  #blob.happy #mouth{width:40px;height:20px;border-radius:0 0 30px 30px;}
-  #blob.confused .eye:first-child{transform:translateY(-4px)}
-  #blob[data-mood="sleepy"] .eye{width:16px;height:8px;background:transparent;border-top:3px solid var(--ink);
+  #blob.happy #mouth{width:1.05em;height:0.55em;border-radius:0 0 0.8em 0.8em;}
+  #blob.confused .eye:first-child{transform:translateY(-0.12em)}
+  #blob[data-mood="sleepy"] .eye{width:0.45em;height:0.22em;background:transparent;border-top:0.09em solid var(--ink);
     border-radius:50% 50% 0 0;animation:none;}
-  #blob[data-mood="sleepy"] #mouth{width:12px;height:6px;background:transparent;border-bottom:3px solid var(--ink);
+  #blob[data-mood="sleepy"] #mouth{width:0.32em;height:0.18em;background:transparent;border-bottom:0.09em solid var(--ink);
     border-radius:0 0 50% 50%;}
   #blob[data-mood="sleepy"] #face{animation:sleepBob 3s ease-in-out infinite;}
   @keyframes sleepBob{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(3px) rotate(-3deg)}}
@@ -70,18 +71,18 @@
     animation:zzzFloat 2.6s ease-out forwards;pointer-events:none;}
   @keyframes zzzFloat{0%{opacity:0;transform:translate(0,0) scale(.6)}20%{opacity:.85}
     100%{opacity:0;transform:translate(14px,-34px) scale(1.15)}}
-  #blob[data-mood="curious"] #face{transform:translateX(6px) rotate(-5deg);}
-  #blob[data-mood="curious"] .eye:first-child{transform:translateY(-4px);}
-  #blob[data-mood="content"] #mouth{width:30px;border-radius:0 0 16px 16px;}
+  #blob[data-mood="curious"] #face{transform:translateX(0.18em) rotate(-5deg);}
+  #blob[data-mood="curious"] .eye:first-child{transform:translateY(-0.12em);}
+  #blob[data-mood="content"] #mouth{width:0.8em;border-radius:0 0 0.45em 0.45em;}
   #blob[data-mood="alert"] .eye{transform:scaleY(1.35) scaleX(1.15);}
-  #blob[data-mood="alert"] #mouth{width:14px;height:14px;border-radius:50%;}
+  #blob[data-mood="alert"] #mouth{width:0.38em;height:0.38em;border-radius:50%;}
   #blob[data-mood="laughing"] .eye{transform:scaleY(.25) translateY(-2px);}
-  #blob[data-mood="laughing"] #mouth{width:38px;height:18px;border-radius:0 0 26px 26px;}
-  #blob[data-mood="wondering"] .eye:first-child{transform:translateY(-6px) rotate(-10deg);}
-  #blob[data-mood="wondering"] .eye:last-child{transform:translateY(3px);}
-  #blob[data-mood="wondering"] #mouth{width:18px;height:8px;border-radius:40% 60% 60% 40%;transform:rotate(8deg);}
+  #blob[data-mood="laughing"] #mouth{width:1em;height:0.5em;border-radius:0 0 0.75em 0.75em;}
+  #blob[data-mood="wondering"] .eye:first-child{transform:translateY(-0.17em) rotate(-10deg);}
+  #blob[data-mood="wondering"] .eye:last-child{transform:translateY(0.09em);}
+  #blob[data-mood="wondering"] #mouth{width:0.5em;height:0.22em;border-radius:40% 60% 60% 40%;transform:rotate(8deg);}
   #blob[data-mood="lookaround"] #eyes{animation:lookSide 2.2s ease-in-out infinite;}
-  @keyframes lookSide{0%,100%{transform:translateX(0)}30%{transform:translateX(5px)}70%{transform:translateX(-5px)}}
+  @keyframes lookSide{0%,100%{transform:translateX(0)}30%{transform:translateX(0.15em)}70%{transform:translateX(-0.15em)}}
 
   #infoCol{position:absolute;top:50%;left:280px;right:60px;transform:translateY(-50%);
     display:none;flex-direction:column;justify-content:center;gap:12px;min-width:0;}
@@ -114,14 +115,17 @@
   #wakeHint{position:absolute;bottom:10px;left:26px;font-size:10px;color:#59547c;}
 
   #modal{position:fixed;inset:0;background:rgba(10,8,18,.72);display:none;align-items:center;justify-content:center;z-index:10;}
-  #modalCard{width:min(70vw,360px);background:var(--bg-panel);border:1px solid var(--lav-soft);border-radius:20px;padding:22px;}
+  #modalCard{width:min(70vw,360px);max-height:88vh;background:var(--bg-panel);border:1px solid var(--lav-soft);
+    border-radius:20px;padding:22px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    display:flex;flex-direction:column;}
   #modalCard h2{margin:0 0 14px;font-size:16px;color:var(--fog);}
   #modalCard label{font-size:12px;color:var(--lav);display:block;margin:12px 0 6px;}
   #modalCard input,#modalCard textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);
     background:var(--ink);color:#eae7fb;font-size:14px;}
   #modalCard textarea{resize:none;height:60px;font-family:inherit;}
   #wakeToggleRow{display:flex;align-items:center;justify-content:space-between;margin-top:14px;}
-  #modalBtns{display:flex;gap:10px;margin-top:18px;}
+  #modalBtns{display:flex;gap:10px;margin-top:18px;position:sticky;bottom:-22px;background:var(--bg-panel);
+    padding:10px 0 4px;}
   #modalBtns button{flex:1;padding:10px;border-radius:10px;border:none;font-weight:600;cursor:pointer;}
   #saveBtn{background:var(--lav);color:#161225;}
   #closeBtn{background:transparent;color:var(--fog);border:1px solid var(--lav-soft) !important;}
@@ -177,6 +181,20 @@
     <input id="apiKeyInput" type="password" placeholder="AIza...">
     <label>Personality (system instruction)</label>
     <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Keep replies under 3 short sentences, warm and a little playful. If the user asks you to open, show, or take them to something, include a "link" field with the best matching URL (use https://gemini.google.com/app for general Gemini requests). Otherwise link must be null.</textarea>
+    <label>Voice engine</label>
+    <select id="ttsEngineInput" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);background:var(--ink);color:#eae7fb;font-size:14px;">
+      <option value="local">Phone's built-in voice (instant, free)</option>
+      <option value="gemini">Gemini TTS (nicer voice, costs an extra API call, slower)</option>
+    </select>
+    <label>Gemini voice (used only if Gemini TTS is selected above)</label>
+    <select id="voiceInput" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);background:var(--ink);color:#eae7fb;font-size:14px;">
+      <option value="Kore">Kore — warm, even</option>
+      <option value="Puck">Puck — upbeat, energetic</option>
+      <option value="Charon">Charon — deep, calm</option>
+      <option value="Aoede">Aoede — bright, breezy</option>
+      <option value="Fenrir">Fenrir — bold, assertive</option>
+      <option value="Leda">Leda — soft, gentle</option>
+    </select>
     <div id="wakeToggleRow">
       <span style="font-size:13px;">Always-listen for "hey blip"</span>
       <input type="checkbox" id="wakeToggle" checked style="width:20px;height:20px;">
@@ -201,7 +219,7 @@ document.getElementById('paceInput').addEventListener('input', e => document.get
 
 <script>
 let CONFIG = { apiKey:'', persona: document.getElementById('personaInput').value, wakeEnabled:true,
-  stationarySecs:6, paceSecs:4.5,
+  stationarySecs:6, paceSecs:4.5, ttsVoice:'Kore', ttsEngine:'local',
   moodDurations:{curious:4, content:5, alert:3, laughing:3, wondering:4, lookaround:4} };
 /* To persist the key across visits once this runs on its own domain (not inside
    Claude's artifact preview), add in saveSettings(): localStorage.setItem('blip_key', val)
@@ -325,7 +343,7 @@ setInterval(()=>{
   if(appState==='idle' && !sleeping && Date.now()-lastInteraction > 120000) enterSleep();
 }, 10000);
 
-/* ---- speaking ---- */
+/* ---- speaking: Gemini TTS, with the browser's built-in voice as a fallback ---- */
 function say(text, emotion, link){
   showActive();
   bubble.style.display='block'; bubble.textContent=text;
@@ -333,15 +351,70 @@ function say(text, emotion, link){
   setFace(emotion==='confused' ? 'confused' : 'happy');
   if(link){ linkAnchor.href=link; linkRow.style.display='block'; } else { linkRow.style.display='none'; }
 
+  let mouthTimer=setInterval(()=>{ mouth.style.height = mouth.style.height==='0.55em' ? '0.26em':'0.55em'; }, 140);
+  function finishSpeaking(){
+    clearInterval(mouthTimer); mouth.style.height='';
+    hideActiveTimer=setTimeout(showIdle, 6000);
+  }
+
+  if(CONFIG.ttsEngine==='gemini' && CONFIG.apiKey){
+    speakWithGemini(text).then(finishSpeaking).catch(()=>{ speakWithBrowserVoice(text, finishSpeaking); });
+  } else {
+    speakWithBrowserVoice(text, finishSpeaking);
+  }
+}
+
+function speakWithBrowserVoice(text, onDone){
   const utter=new SpeechSynthesisUtterance(text);
   utter.rate=1.02; utter.pitch=1.15;
-  let mouthTimer=setInterval(()=>{ mouth.style.height = mouth.style.height==='20px' ? '10px':'20px'; }, 140);
-  utter.onend=()=>{
-    clearInterval(mouthTimer); mouth.style.height='10px';
-    hideActiveTimer=setTimeout(showIdle, 6000);
-  };
+  utter.onend=onDone; utter.onerror=onDone;
   speechSynthesis.cancel();
   speechSynthesis.speak(utter);
+}
+
+/* Gemini's TTS model returns raw 16-bit PCM audio (base64) rather than a file,
+   so it's decoded by hand and played through the Web Audio API. */
+async function speakWithGemini(text){
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`;
+  const body={
+    contents:[{parts:[{text}]}],
+    generationConfig:{
+      responseModalities:['AUDIO'],
+      speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName: CONFIG.ttsVoice || 'Kore'}}}
+    }
+  };
+  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!res.ok) throw new Error('TTS API '+res.status);
+  const data=await res.json();
+  const part=data.candidates?.[0]?.content?.parts?.[0];
+  const b64=part?.inlineData?.data;
+  const mime=part?.inlineData?.mimeType || 'audio/L16;rate=24000';
+  if(!b64) throw new Error('no audio returned');
+  await playPcmBase64(b64, mime);
+}
+
+function playPcmBase64(b64, mime){
+  return new Promise((resolve, reject)=>{
+    try{
+      const rateMatch=mime.match(/rate=(\d+)/);
+      const sampleRate=rateMatch ? parseInt(rateMatch[1]) : 24000;
+      const binary=atob(b64);
+      const bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+      const view=new DataView(bytes.buffer);
+      const sampleCount=Math.floor(bytes.length/2);
+      const float32=new Float32Array(sampleCount);
+      for(let i=0;i<sampleCount;i++){ float32[i]=view.getInt16(i*2, true)/32768; }
+      const ctx=new (window.AudioContext||window.webkitAudioContext)();
+      const buffer=ctx.createBuffer(1, sampleCount, sampleRate);
+      buffer.copyToChannel(float32, 0);
+      const src=ctx.createBufferSource();
+      src.buffer=buffer;
+      src.connect(ctx.destination);
+      src.onended=()=>{ resolve(); ctx.close(); };
+      src.start();
+    }catch(e){ reject(e); }
+  });
 }
 
 /* ---- gemini call ---- */
@@ -373,38 +446,46 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 function manualListen(){
   if(!SR){ statusEl.textContent='speech recognition not supported'; return; }
   toggleDrawer(false);
+  pauseWakeLoop();
   const r=new SR(); r.lang='en-IN'; r.interimResults=false; r.maxAlternatives=1;
   r.onstart=()=>{ showActive(); setFace('listening'); statusEl.textContent='listening...'; };
-  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); };
-  r.onerror=()=>{ statusEl.textContent='mic error'; hideActiveTimer=setTimeout(showIdle,3000); };
+  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); resumeWakeLoopSoon(); };
+  r.onerror=(e)=>{ statusEl.textContent='mic error: '+e.error; hideActiveTimer=setTimeout(showIdle,3000); resumeWakeLoopSoon(); };
   r.start();
 }
 
 /* ---- always-listening wake phrase loop ---- */
 const WAKE_PHRASE='hey blip';
-let wakeRecog=null, wakeRunning=false;
+let wakeRecog=null, wakePaused=false;
 function startWakeLoop(){
-  if(!SR || !CONFIG.wakeEnabled) return;
-  if(wakeRunning) return;
+  if(!SR || !CONFIG.wakeEnabled || wakePaused || wakeRecog) return;
   wakeRecog=new SR(); wakeRecog.lang='en-IN'; wakeRecog.continuous=true; wakeRecog.interimResults=false;
   wakeRecog.onresult=(e)=>{
     const said=e.results[e.results.length-1][0].transcript.toLowerCase();
     if(said.includes(WAKE_PHRASE)){
       const remainder=said.split(WAKE_PHRASE)[1]?.trim();
-      if(remainder && remainder.length>2){ askGemini(remainder); }
+      if(remainder && remainder.length>2){ pauseWakeLoop(); askGemini(remainder); resumeWakeLoopSoon(); }
       else { manualListenAfterWake(); }
     }
   };
-  wakeRecog.onend=()=>{ wakeRunning=false; if(CONFIG.wakeEnabled) setTimeout(startWakeLoop, 400); };
-  wakeRecog.onerror=()=>{ wakeRunning=false; setTimeout(()=>{ if(CONFIG.wakeEnabled) startWakeLoop(); }, 1500); };
-  try{ wakeRecog.start(); wakeRunning=true; }catch(e){ wakeRunning=false; }
+  wakeRecog.onend=()=>{ wakeRecog=null; if(CONFIG.wakeEnabled && !wakePaused) setTimeout(startWakeLoop, 400); };
+  wakeRecog.onerror=()=>{ wakeRecog=null; if(CONFIG.wakeEnabled && !wakePaused) setTimeout(startWakeLoop, 1500); };
+  try{ wakeRecog.start(); }catch(e){ wakeRecog=null; }
 }
-function stopWakeLoop(){ CONFIG.wakeEnabled=false; if(wakeRecog) wakeRecog.stop(); }
+function pauseWakeLoop(){
+  wakePaused=true;
+  if(wakeRecog){ try{ wakeRecog.stop(); }catch(e){} wakeRecog=null; }
+}
+function resumeWakeLoopSoon(){
+  setTimeout(()=>{ wakePaused=false; startWakeLoop(); }, 800);
+}
+function stopWakeLoop(){ CONFIG.wakeEnabled=false; pauseWakeLoop(); }
 function manualListenAfterWake(){
+  pauseWakeLoop();
   showActive(); setFace('listening'); statusEl.textContent='listening...';
   const r=new SR(); r.lang='en-IN'; r.interimResults=false;
-  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); };
-  r.onerror=()=>{ statusEl.textContent='mic error'; hideActiveTimer=setTimeout(showIdle,3000); };
+  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); resumeWakeLoopSoon(); };
+  r.onerror=(e)=>{ statusEl.textContent='mic error: '+e.error; hideActiveTimer=setTimeout(showIdle,3000); resumeWakeLoopSoon(); };
   r.start();
 }
 
@@ -421,6 +502,8 @@ function openSettings(){
   markInteraction();
   document.getElementById('apiKeyInput').value=CONFIG.apiKey;
   document.getElementById('wakeToggle').checked=CONFIG.wakeEnabled;
+  document.getElementById('voiceInput').value=CONFIG.ttsVoice;
+  document.getElementById('ttsEngineInput').value=CONFIG.ttsEngine;
   document.getElementById('stationaryInput').value=CONFIG.stationarySecs; document.getElementById('stationaryOut').textContent=CONFIG.stationarySecs;
   document.getElementById('paceInput').value=CONFIG.paceSecs; document.getElementById('paceOut').textContent=CONFIG.paceSecs;
   MOOD_LIST.forEach(m => {
@@ -433,6 +516,8 @@ function closeSettings(){ document.getElementById('modal').style.display='none';
 function saveSettings(){
   CONFIG.apiKey=document.getElementById('apiKeyInput').value.trim();
   CONFIG.persona=document.getElementById('personaInput').value.trim();
+  CONFIG.ttsVoice=document.getElementById('voiceInput').value;
+  CONFIG.ttsEngine=document.getElementById('ttsEngineInput').value;
   CONFIG.stationarySecs=parseFloat(document.getElementById('stationaryInput').value);
   CONFIG.paceSecs=parseFloat(document.getElementById('paceInput').value);
   MOOD_LIST.forEach(m => {
