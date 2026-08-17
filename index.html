@@ -423,7 +423,7 @@ async function askGemini(userText){
   showActive();
   setFace('thinking'); statusEl.textContent='thinking...'; bubble.style.display='none'; linkRow.style.display='none';
 
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`;
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`;
   const body={
     systemInstruction:{parts:[{text: CONFIG.persona + ' Always respond ONLY with strict JSON: {"reply": string, "emotion": "happy"|"confused", "link": string|null}. No markdown.'}]},
     contents:[{role:'user', parts:[{text:userText}]}],
