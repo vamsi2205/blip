@@ -431,13 +431,18 @@ async function askGemini(userText){
   };
   try{
     const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok) throw new Error('API '+res.status);
+    if(!res.ok){
+      const errBody=await res.text();
+      console.error('Gemini API error', res.status, errBody);
+      throw new Error(`API ${res.status}: ${errBody.slice(0,200)}`);
+    }
     const data=await res.json();
     const raw=data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     let parsed; try{parsed=JSON.parse(raw);}catch{parsed={reply:raw,emotion:'happy',link:null};}
     say(parsed.reply || "hmm, I've got nothing.", parsed.emotion, parsed.link);
   }catch(err){
-    say('something went wrong talking to Gemini.', 'confused', null);
+    console.error('askGemini failed:', err);
+    say(`something went wrong: ${String(err.message||err).slice(0,150)}`, 'confused', null);
   }
 }
 
