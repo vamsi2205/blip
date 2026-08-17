@@ -530,7 +530,7 @@ async function askGemini(userText){
 async function askGroq(userText){
   try{
     const parsed=await requestWithRetry(
-      ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'],
+      ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'],
       (model)=>({
         url:'https://api.groq.com/openai/v1/chat/completions',
         opts:{
