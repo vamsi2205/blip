@@ -159,7 +159,7 @@
     <div id="idleText">good day</div>
     <div id="idleTime">--:--</div>
   </div>
-  <div id="wakeHint">say "hey blip" to talk</div>
+  <div id="wakeHint">say "blip" to talk</div>
 </div>
 
 <div id="drawerTab" onclick="toggleDrawer()">
@@ -177,10 +177,17 @@
 <div id="modal">
   <div id="modalCard">
     <h2>Blip settings</h2>
+    <label>Brain (AI engine)</label>
+    <select id="brainEngineInput" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);background:var(--ink);color:#eae7fb;font-size:14px;">
+      <option value="gemini">Gemini (default)</option>
+      <option value="groq">Groq (usually much faster to respond)</option>
+    </select>
     <label>Gemini API key</label>
     <input id="apiKeyInput" type="password" placeholder="AIza...">
+    <label>Groq API key (used only if Groq is selected above)</label>
+    <input id="groqApiKeyInput" type="password" placeholder="gsk_...">
     <label>Personality (system instruction)</label>
-    <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Keep replies under 3 short sentences, warm and a little playful. If the user asks you to open, show, or take them to something, include a "link" field with the best matching URL (use https://gemini.google.com/app for general Gemini requests). Otherwise link must be null.</textarea>
+    <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Answer in one short, direct sentence unless the user clearly asks for more — get straight to the point, never ramble. Warm and a little playful. If the user asks you to open, show, or take them to something, include a "link" field with the best matching URL (use https://gemini.google.com/app for general requests). Otherwise link must be null.</textarea>
     <label>Voice engine</label>
     <select id="ttsEngineInput" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);background:var(--ink);color:#eae7fb;font-size:14px;">
       <option value="local">Phone's built-in voice (instant, free)</option>
@@ -196,7 +203,7 @@
       <option value="Leda">Leda — soft, gentle</option>
     </select>
     <div id="wakeToggleRow">
-      <span style="font-size:13px;">Always-listen for "hey blip"</span>
+      <span style="font-size:13px;">Always-listen for "blip"</span>
       <input type="checkbox" id="wakeToggle" checked style="width:20px;height:20px;">
     </div>
     <label>Stay in one spot (seconds): <span id="stationaryOut">6</span></label>
@@ -209,7 +216,7 @@
       <button id="closeBtn" onclick="closeSettings()">Cancel</button>
       <button id="saveBtn" onclick="saveSettings()">Save &amp; close</button>
     </div>
-    <div id="note">The key stays in memory only for this session. See the comment near the top of the script for adding localStorage once you deploy this yourself.</div>
+    <div id="note">Settings, including your API keys, are saved on this device only (in this browser's local storage) — you won't need to re-enter them here again, but they won't carry over to a different phone or computer, and a "clear site data" reset wipes them.</div>
   </div>
 </div>
 <script>
@@ -218,13 +225,26 @@ document.getElementById('paceInput').addEventListener('input', e => document.get
 </script>
 
 <script>
-let CONFIG = { apiKey:'', persona: document.getElementById('personaInput').value, wakeEnabled:true,
+const DEFAULT_CONFIG = { apiKey:'', groqApiKey:'', brainProvider:'gemini', persona: document.getElementById('personaInput').value, wakeEnabled:true,
   stationarySecs:6, paceSecs:4.5, ttsVoice:'Kore', ttsEngine:'local',
   moodDurations:{curious:4, content:5, alert:3, laughing:3, wondering:4, lookaround:4} };
-/* To persist the key across visits once this runs on its own domain (not inside
-   Claude's artifact preview), add in saveSettings(): localStorage.setItem('blip_key', val)
-   and on load: CONFIG.apiKey = localStorage.getItem('blip_key') || ''. Left out by
-   default since storage APIs aren't reliable inside the preview sandbox. */
+
+/* Settings (including API keys) are saved to this browser's localStorage so you
+   only have to type them once per device — they survive reloads and reopening
+   the app, but don't sync between different phones/computers, and a "clear site
+   data" reset (like the one used to fix the old service worker cache) wipes them. */
+const STORAGE_KEY='blip_config';
+function loadConfig(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    return { ...DEFAULT_CONFIG, ...saved, moodDurations:{ ...DEFAULT_CONFIG.moodDurations, ...(saved.moodDurations||{}) } };
+  }catch(e){ return { ...DEFAULT_CONFIG }; }
+}
+function saveConfigToStorage(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(CONFIG)); }catch(e){ console.error('could not save settings locally', e); }
+}
+let CONFIG = loadConfig();
+document.getElementById('personaInput').value = CONFIG.persona;
 
 const MOOD_LIST = Object.keys(CONFIG.moodDurations);
 const moodSlidersBox = document.getElementById('moodSliders');
@@ -354,7 +374,7 @@ function say(text, emotion, link){
   let mouthTimer=setInterval(()=>{ mouth.style.height = mouth.style.height==='0.55em' ? '0.26em':'0.55em'; }, 140);
   function finishSpeaking(){
     clearInterval(mouthTimer); mouth.style.height='';
-    hideActiveTimer=setTimeout(showIdle, 6000);
+    startConversationTurn(); // stay listening for a follow-up without needing the wake word again
   }
 
   if(CONFIG.ttsEngine==='gemini' && CONFIG.apiKey){
@@ -417,85 +437,181 @@ function playPcmBase64(b64, mime){
   });
 }
 
-/* ---- gemini call ---- */
-async function askGemini(userText){
-  if(!CONFIG.apiKey){ say("I need a Gemini API key — open the drawer and tap the gear.", 'confused', null); return; }
-  showActive();
-  setFace('thinking'); statusEl.textContent='thinking...'; bubble.style.display='none'; linkRow.style.display='none';
+/* ---- AI call: shared retry/fallback helper, used by both Gemini and Groq ---- */
+/* Some model responses echo the JSON field name as a label inside the text
+   itself (e.g. "Reply: hello!") despite the schema — strip that defensively. */
+function cleanReply(text){
+  if(!text) return text;
+  return text.replace(/^\s*reply\s*:\s*/i, '').trim();
+}
 
-  const body={
-    systemInstruction:{parts:[{text: CONFIG.persona + ' Always respond ONLY with strict JSON: {"reply": string, "emotion": "happy"|"confused", "link": string|null}. No markdown.'}]},
-    contents:[{role:'user', parts:[{text:userText}]}],
-    generationConfig:{responseMimeType:'application/json', maxOutputTokens:220}
-  };
-
-  // The primary model first; if it's overloaded (503) or rate-limited (429) after
-  // a couple of quick retries, fall back to a lighter model rather than giving up.
-  const models=['gemini-3.7-flash', 'gemini-flash-latest'];
+async function requestWithRetry(models, buildRequest, extractText){
   let lastErr=null;
-
   for(const model of models){
-    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`;
     for(let attempt=0; attempt<2; attempt++){
       try{
-        const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const {url, opts}=buildRequest(model);
+        const res=await fetch(url, opts);
         if(!res.ok){
           const errBody=await res.text();
-          console.error('Gemini API error', res.status, errBody);
+          console.error('AI API error', res.status, errBody);
           const err=new Error(`API ${res.status}: ${errBody.slice(0,200)}`);
           err.status=res.status;
           throw err;
         }
         const data=await res.json();
-        const raw=data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-        let parsed; try{parsed=JSON.parse(raw);}catch{parsed={reply:raw,emotion:'happy',link:null};}
-        say(parsed.reply || "hmm, I've got nothing.", parsed.emotion, parsed.link);
-        return;
+        const raw=extractText(data);
+        let parsed;
+        try{ parsed=JSON.parse(raw); }
+        catch{
+          console.error('unparsable/truncated JSON:', raw);
+          const err=new Error('reply got cut off before finishing');
+          err.status='parse';
+          throw err;
+        }
+        return parsed;
       }catch(err){
         lastErr=err;
-        if(err.status===503 || err.status===429){
-          statusEl.textContent = err.status===503 ? 'model is busy, retrying...' : 'rate limited, retrying...';
+        if(err.status===503 || err.status===429 || err.status===500 || err.status==='parse'){
+          statusEl.textContent = err.status==='parse' ? 'reply got cut off, retrying...'
+            : err.status===429 ? 'rate limited, retrying...' : 'model is busy, retrying...';
           await new Promise(r=>setTimeout(r, 900*(attempt+1)));
-          continue; // retry same model once, then move to fallback model
+          continue; // retry same model once, then move to the fallback model
         }
-        break; // non-transient error — don't bother retrying or falling back
+        throw err; // non-transient error — don't bother retrying or falling back
       }
     }
   }
+  throw lastErr;
+}
 
-  console.error('askGemini failed after retries:', lastErr);
-  const msg = lastErr?.status===503
-    ? "Gemini's pretty busy right now — try again in a moment."
-    : `something went wrong: ${String(lastErr?.message||lastErr).slice(0,150)}`;
+function handleAIError(err){
+  console.error('AI request failed after retries:', err);
+  const msg = err?.status===503 ? "the model's pretty busy right now — try again in a moment."
+    : err?.status==='parse' ? "that reply got cut off — try asking again."
+    : `something went wrong: ${String(err?.message||err).slice(0,150)}`;
   say(msg, 'confused', null);
 }
 
-/* ---- speech recognition: manual tap-to-talk ---- */
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-function manualListen(){
-  if(!SR){ statusEl.textContent='speech recognition not supported'; return; }
-  toggleDrawer(false);
-  pauseWakeLoop();
-  const r=new SR(); r.lang='en-IN'; r.interimResults=false; r.maxAlternatives=1;
-  r.onstart=()=>{ showActive(); setFace('listening'); statusEl.textContent='listening...'; };
-  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); resumeWakeLoopSoon(); };
-  r.onerror=(e)=>{ statusEl.textContent='mic error: '+e.error; hideActiveTimer=setTimeout(showIdle,3000); resumeWakeLoopSoon(); };
-  r.start();
+const JSON_INSTRUCTION=' Always respond ONLY with a JSON object: {"reply": string, "emotion": "happy" or "confused", "link": string or null}. No markdown, no extra text.';
+
+async function askGemini(userText){
+  const body={
+    systemInstruction:{parts:[{text: CONFIG.persona + JSON_INSTRUCTION}]},
+    contents:[{role:'user', parts:[{text:userText}]}],
+    generationConfig:{
+      responseMimeType:'application/json',
+      responseSchema:{
+        type:'OBJECT',
+        properties:{
+          reply:{type:'STRING'},
+          emotion:{type:'STRING', enum:['happy','confused']},
+          link:{type:'STRING', nullable:true}
+        },
+        required:['reply','emotion']
+      },
+      maxOutputTokens:500,
+      thinkingConfig:{thinkingLevel:'low'}
+    }
+  };
+  try{
+    const parsed=await requestWithRetry(
+      ['gemini-3.7-flash', 'gemini-flash-latest'],
+      (model)=>({
+        url:`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`,
+        opts:{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
+      }),
+      (data)=> data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    );
+    say(cleanReply(parsed.reply) || "hmm, I've got nothing.", parsed.emotion, parsed.link);
+  }catch(err){ handleAIError(err); }
 }
 
-/* ---- always-listening wake phrase loop ---- */
-const WAKE_PHRASE='hey blip';
+async function askGroq(userText){
+  try{
+    const parsed=await requestWithRetry(
+      ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'],
+      (model)=>({
+        url:'https://api.groq.com/openai/v1/chat/completions',
+        opts:{
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'Authorization':`Bearer ${CONFIG.groqApiKey}`},
+          body:JSON.stringify({
+            model,
+            messages:[
+              {role:'system', content: CONFIG.persona + JSON_INSTRUCTION},
+              {role:'user', content: userText}
+            ],
+            response_format:{type:'json_object'},
+            max_tokens:300
+          })
+        }
+      }),
+      (data)=> data.choices?.[0]?.message?.content || ''
+    );
+    say(cleanReply(parsed.reply) || "hmm, I've got nothing.", parsed.emotion, parsed.link);
+  }catch(err){ handleAIError(err); }
+}
+
+async function askAI(userText){
+  if(CONFIG.brainProvider==='groq' && !CONFIG.groqApiKey){ say("I need a Groq API key — open the drawer and tap the gear.", 'confused', null); return; }
+  if(CONFIG.brainProvider!=='groq' && !CONFIG.apiKey){ say("I need a Gemini API key — open the drawer and tap the gear.", 'confused', null); return; }
+  showActive();
+  setFace('thinking'); statusEl.textContent='thinking...'; bubble.style.display='none'; linkRow.style.display='none';
+  if(CONFIG.brainProvider==='groq') return askGroq(userText);
+  return askGemini(userText);
+}
+
+/* ---- speech recognition: one listen attempt with a timeout, shared by every entry point ---- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+function listenOnce({ onResult, onTimeout, timeoutMs=8000 }){
+  if(!SR){ statusEl.textContent='speech recognition not supported'; onTimeout && onTimeout(); return; }
+  showActive();
+  setFace('listening'); statusEl.textContent='listening...';
+  const r=new SR(); r.lang='en-IN'; r.interimResults=false; r.maxAlternatives=1;
+  let done=false;
+  const timer=setTimeout(()=>{ try{ r.stop(); }catch(e){} finish(onTimeout); }, timeoutMs);
+  function finish(fn, ...args){ if(done) return; done=true; clearTimeout(timer); fn && fn(...args); }
+  r.onresult=(e)=>{ finish(onResult, e.results[0][0].transcript); };
+  r.onerror=(e)=>{ statusEl.textContent='mic error: '+e.error; finish(onTimeout); };
+  r.onend=()=>{ finish(onTimeout); };
+  try{ r.start(); }catch(e){ finish(onTimeout); }
+}
+
+/* One full conversational turn: listen, and if nothing is heard within the
+   timeout, end the conversation (resume ambient wake-listening + idle drift).
+   If something IS heard, handleUserUtterance() answers it, and say()'s
+   finishSpeaking() calls this again — so a whole back-and-forth continues
+   without ever needing to repeat "hey blip". */
+function startConversationTurn(){
+  pauseWakeLoop();
+  listenOnce({
+    onResult: (text)=>{ handleUserUtterance(text); },
+    onTimeout: ()=>{ resumeWakeLoopSoon(); showIdle(); }
+  });
+}
+function handleUserUtterance(text){
+  askAI(text);
+}
+
+function manualListen(){
+  toggleDrawer(false);
+  startConversationTurn();
+}
+
+/* ---- always-listening wake word loop ---- */
+const WAKE_WORD='blip';
 let wakeRecog=null, wakePaused=false;
 function startWakeLoop(){
   if(!SR || !CONFIG.wakeEnabled || wakePaused || wakeRecog) return;
   wakeRecog=new SR(); wakeRecog.lang='en-IN'; wakeRecog.continuous=true; wakeRecog.interimResults=false;
   wakeRecog.onresult=(e)=>{
     const said=e.results[e.results.length-1][0].transcript.toLowerCase();
-    if(said.includes(WAKE_PHRASE)){
-      const remainder=said.split(WAKE_PHRASE)[1]?.trim();
-      if(remainder && remainder.length>2){ pauseWakeLoop(); askGemini(remainder); resumeWakeLoopSoon(); }
-      else { manualListenAfterWake(); }
-    }
+    const idx=said.indexOf(WAKE_WORD);
+    if(idx===-1) return;
+    const remainder=said.slice(idx+WAKE_WORD.length).trim();
+    if(remainder.length>2){ pauseWakeLoop(); handleUserUtterance(remainder); }
+    else { startConversationTurn(); } // heard just the wake word alone — listen for the actual command next
   };
   wakeRecog.onend=()=>{ wakeRecog=null; if(CONFIG.wakeEnabled && !wakePaused) setTimeout(startWakeLoop, 400); };
   wakeRecog.onerror=()=>{ wakeRecog=null; if(CONFIG.wakeEnabled && !wakePaused) setTimeout(startWakeLoop, 1500); };
@@ -509,14 +625,7 @@ function resumeWakeLoopSoon(){
   setTimeout(()=>{ wakePaused=false; startWakeLoop(); }, 800);
 }
 function stopWakeLoop(){ CONFIG.wakeEnabled=false; pauseWakeLoop(); }
-function manualListenAfterWake(){
-  pauseWakeLoop();
-  showActive(); setFace('listening'); statusEl.textContent='listening...';
-  const r=new SR(); r.lang='en-IN'; r.interimResults=false;
-  r.onresult=(e)=>{ askGemini(e.results[0][0].transcript); resumeWakeLoopSoon(); };
-  r.onerror=(e)=>{ statusEl.textContent='mic error: '+e.error; hideActiveTimer=setTimeout(showIdle,3000); resumeWakeLoopSoon(); };
-  r.start();
-}
+
 
 /* ---- drawer ---- */
 function toggleDrawer(force){
@@ -530,6 +639,8 @@ function toggleDrawer(force){
 function openSettings(){
   markInteraction();
   document.getElementById('apiKeyInput').value=CONFIG.apiKey;
+  document.getElementById('groqApiKeyInput').value=CONFIG.groqApiKey;
+  document.getElementById('brainEngineInput').value=CONFIG.brainProvider;
   document.getElementById('wakeToggle').checked=CONFIG.wakeEnabled;
   document.getElementById('voiceInput').value=CONFIG.ttsVoice;
   document.getElementById('ttsEngineInput').value=CONFIG.ttsEngine;
@@ -544,6 +655,8 @@ function openSettings(){
 function closeSettings(){ document.getElementById('modal').style.display='none'; }
 function saveSettings(){
   CONFIG.apiKey=document.getElementById('apiKeyInput').value.trim();
+  CONFIG.groqApiKey=document.getElementById('groqApiKeyInput').value.trim();
+  CONFIG.brainProvider=document.getElementById('brainEngineInput').value;
   CONFIG.persona=document.getElementById('personaInput').value.trim();
   CONFIG.ttsVoice=document.getElementById('voiceInput').value;
   CONFIG.ttsEngine=document.getElementById('ttsEngineInput').value;
@@ -555,6 +668,7 @@ function saveSettings(){
   document.documentElement.style.setProperty('--wander-speed', CONFIG.paceSecs+'s');
   const wakeOn=document.getElementById('wakeToggle').checked;
   CONFIG.wakeEnabled=wakeOn;
+  saveConfigToStorage();
   closeSettings();
   if(appState==='idle' && !sleeping){ startFloating(); startAmbient(); }
   if(wakeOn) startWakeLoop(); else if(wakeRecog) wakeRecog.stop();
@@ -568,6 +682,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
 /* ---- initial wake-up gesture: fullscreen + orientation + wakelock + mic permission ---- */
 async function wakeUp(){
   markInteraction();
+  document.documentElement.style.setProperty('--wander-speed', CONFIG.paceSecs+'s');
   try{ await document.documentElement.requestFullscreen(); }catch(e){}
   try{ if(screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); }catch(e){}
   requestWakeLock();
