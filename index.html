@@ -37,7 +37,7 @@
     transition:top var(--wander-speed) ease, left var(--wander-speed) ease, transform .6s ease;
     display:flex;align-items:center;justify-content:center;}
   #stage.active #faceCol{top:50%;left:130px;transform:translate(-50%,-50%);transition:top .7s ease, left .7s ease, transform .6s ease;}
-  #blob{position:relative;width:min(46vh,42vw,230px);height:min(46vh,42vw,230px);
+  #blob{position:relative;cursor:pointer;width:min(46vh,42vw,230px);height:min(46vh,42vw,230px);
     font-size:min(5vh,4.6vw,25px);
     background:linear-gradient(160deg,var(--lav) 0%, var(--lav-soft) 70%);
     border-radius:42% 58% 63% 37% / 41% 44% 56% 59%;
@@ -105,13 +105,9 @@
     justify-content:center;gap:22px;transition:right .28s ease;z-index:4;}
   #drawer.open{right:0;}
   #drawerTab.open svg{transform:rotate(180deg);}
-  #micBtn,#gearBtn{width:56px;height:56px;border-radius:50%;border:none;display:flex;align-items:center;
-    justify-content:center;cursor:pointer;}
-  #micBtn{background:radial-gradient(circle at 35% 30%,#a99bf0,var(--lav-soft));}
-  #micBtn.on{background:radial-gradient(circle at 35% 30%,#9df0d9,#3c8f7c);}
-  #gearBtn{background:var(--bg-panel);border:1px solid var(--lav-soft);}
-  #micBtn svg,#gearBtn svg{width:22px;height:22px;color:#161225;}
-  #gearBtn svg{color:var(--fog);}
+  #gearBtn{width:56px;height:56px;border-radius:50%;border:none;display:flex;align-items:center;
+    justify-content:center;cursor:pointer;background:var(--bg-panel);border:1px solid var(--lav-soft);}
+  #gearBtn svg{width:22px;height:22px;color:var(--fog);}
   #wakeHint{position:absolute;bottom:10px;left:26px;font-size:10px;color:#59547c;}
 
   #modal{position:fixed;inset:0;background:rgba(10,8,18,.72);display:none;align-items:center;justify-content:center;z-index:10;}
@@ -159,16 +155,13 @@
     <div id="idleText">good day</div>
     <div id="idleTime">--:--</div>
   </div>
-  <div id="wakeHint">say "blip" to talk</div>
+  <div id="wakeHint">say "blip", or double-tap Blip to talk</div>
 </div>
 
 <div id="drawerTab" onclick="toggleDrawer()">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
 </div>
 <div id="drawer">
-  <button id="micBtn" onclick="manualListen()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-  </button>
   <button id="gearBtn" onclick="openSettings()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
   </button>
@@ -187,7 +180,7 @@
     <label>Groq API key (used only if Groq is selected above)</label>
     <input id="groqApiKeyInput" type="password" placeholder="gsk_...">
     <label>Personality (system instruction)</label>
-    <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Answer in one short, direct sentence unless the user clearly asks for more — get straight to the point, never ramble. Warm and a little playful. If the user asks you to open, show, or take them to something, include a "link" field with the best matching URL (use https://gemini.google.com/app for general requests). Otherwise link must be null.</textarea>
+    <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Default to a short, direct answer — one or two sentences — but give a longer, more complete answer whenever the question genuinely needs it (explanations, instructions, anything with real substance). Brevity is the default, not a hard limit. Warm and a little playful, never rambling for its own sake. If the user asks you to open, show, or take them to something, include a "link" field with the best matching URL (use https://gemini.google.com/app for general requests). Otherwise link must be null.</textarea>
     <label>Voice engine</label>
     <select id="ttsEngineInput" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);background:var(--ink);color:#eae7fb;font-size:14px;">
       <option value="local">Phone's built-in voice (instant, free)</option>
@@ -212,6 +205,8 @@
     <input id="paceInput" type="range" min="1" max="10" step="0.5" value="4.5" style="width:100%;">
     <label style="margin-top:14px;">Expression durations (seconds)</label>
     <div id="moodSliders" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <button id="clearMemoryBtn" onclick="clearHistory(); this.textContent='cleared!'; setTimeout(()=>this.textContent='Clear conversation memory', 1200);"
+      style="margin-top:14px;padding:9px;border-radius:10px;border:1px solid var(--lav-soft);background:transparent;color:var(--fog);font-size:12.5px;cursor:pointer;">Clear conversation memory</button>
     <div id="modalBtns">
       <button id="closeBtn" onclick="closeSettings()">Cancel</button>
       <button id="saveBtn" onclick="saveSettings()">Save &amp; close</button>
@@ -264,7 +259,7 @@ const activeBox=document.getElementById('activeBox');
 const idleText=document.getElementById('idleText'), idleTime=document.getElementById('idleTime');
 const statusEl=document.getElementById('status'), bubble=document.getElementById('bubble');
 const linkRow=document.getElementById('linkRow'), linkAnchor=document.getElementById('linkAnchor');
-const micBtn=document.getElementById('micBtn'), drawer=document.getElementById('drawer'), drawerTab=document.getElementById('drawerTab');
+const drawer=document.getElementById('drawer'), drawerTab=document.getElementById('drawerTab');
 
 const USER_NAME='Vamsi';
 let appState='idle'; // idle | listening | thinking | speaking
@@ -350,6 +345,7 @@ function enterSleep(){
   stopAmbient();
   blob.dataset.mood='sleepy';
   stopFloating();
+  clearHistory();
   zzzTimer=setInterval(spawnZzz, 2200);
   spawnZzz();
 }
@@ -495,10 +491,21 @@ function handleAIError(err){
 
 const JSON_INSTRUCTION=' Always respond ONLY with a JSON object: {"reply": string, "emotion": "happy" or "confused", "link": string or null}. No markdown, no extra text.';
 
+/* Built fresh each turn (not cached) so "what time is it" gets a real answer
+   instead of the model guessing or hedging with a long disclaimer. */
+function buildSystemPrompt(){
+  const now=new Date();
+  return `${CONFIG.persona} The current date and time is ${now.toString()}. Use this directly if asked about the time, date, or day — don't say you can't know it.${JSON_INSTRUCTION}`;
+}
+
 async function askGemini(userText){
+  const historyContents=conversationHistory.slice(0,-1).map(h=>({
+    role: h.who==='bot' ? 'model' : 'user',
+    parts:[{text:h.text}]
+  }));
   const body={
-    systemInstruction:{parts:[{text: CONFIG.persona + JSON_INSTRUCTION}]},
-    contents:[{role:'user', parts:[{text:userText}]}],
+    systemInstruction:{parts:[{text: buildSystemPrompt()}]},
+    contents:[...historyContents, {role:'user', parts:[{text:userText}]}],
     generationConfig:{
       responseMimeType:'application/json',
       responseSchema:{
@@ -510,56 +517,134 @@ async function askGemini(userText){
         },
         required:['reply','emotion']
       },
-      maxOutputTokens:500,
+      maxOutputTokens:900,
       thinkingConfig:{thinkingLevel:'low'}
     }
   };
-  try{
-    const parsed=await requestWithRetry(
-      ['gemini-3.7-flash', 'gemini-flash-latest'],
-      (model)=>({
-        url:`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`,
-        opts:{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
-      }),
-      (data)=> data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    );
-    say(cleanReply(parsed.reply) || "hmm, I've got nothing.", parsed.emotion, parsed.link);
-  }catch(err){ handleAIError(err); }
+  return requestWithRetry(
+    ['gemini-3.7-flash', 'gemini-flash-latest'],
+    (model)=>({
+      url:`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(CONFIG.apiKey)}`,
+      opts:{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
+    }),
+    (data)=> data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  );
 }
 
 async function askGroq(userText){
-  try{
-    const parsed=await requestWithRetry(
-      ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'],
-      (model)=>({
-        url:'https://api.groq.com/openai/v1/chat/completions',
-        opts:{
-          method:'POST',
-          headers:{'Content-Type':'application/json', 'Authorization':`Bearer ${CONFIG.groqApiKey}`},
-          body:JSON.stringify({
-            model,
-            messages:[
-              {role:'system', content: CONFIG.persona + JSON_INSTRUCTION},
-              {role:'user', content: userText}
-            ],
-            response_format:{type:'json_object'},
-            max_tokens:300
-          })
-        }
-      }),
-      (data)=> data.choices?.[0]?.message?.content || ''
-    );
-    say(cleanReply(parsed.reply) || "hmm, I've got nothing.", parsed.emotion, parsed.link);
-  }catch(err){ handleAIError(err); }
+  const historyMessages=conversationHistory.slice(0,-1).map(h=>({
+    role: h.who==='bot' ? 'assistant' : 'user',
+    content: h.text
+  }));
+  return requestWithRetry(
+    ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'],
+    (model)=>({
+      url:'https://api.groq.com/openai/v1/chat/completions',
+      opts:{
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'Authorization':`Bearer ${CONFIG.groqApiKey}`},
+        body:JSON.stringify({
+          model,
+          messages:[
+            {role:'system', content: buildSystemPrompt()},
+            ...historyMessages,
+            {role:'user', content: userText}
+          ],
+          response_format:{
+            type:'json_schema',
+            json_schema:{
+              name:'blip_reply',
+              strict:true,
+              schema:{
+                type:'object',
+                properties:{
+                  reply:{type:'string'},
+                  emotion:{type:'string', enum:['happy','confused']},
+                  link:{type:['string','null']}
+                },
+                required:['reply','emotion','link'],
+                additionalProperties:false
+              }
+            }
+          },
+          reasoning_effort:'low',
+          max_completion_tokens:900
+        })
+      }
+    }),
+    (data)=> data.choices?.[0]?.message?.content || ''
+  );
+}
+
+/* ---- conversation memory ---- */
+/* Stored in a provider-neutral shape ({who:'user'|'bot', text}) and converted
+   to whatever format Gemini/Groq expect at request time. Capped so a long
+   session doesn't quietly balloon token usage. Cleared on real inactivity
+   sleep — a nap is a natural point for a fresh conversation. */
+let conversationHistory=[];
+const MAX_HISTORY_TURNS=6;
+function pushHistory(who, text){
+  conversationHistory.push({who, text});
+  const maxEntries=MAX_HISTORY_TURNS*2;
+  if(conversationHistory.length>maxEntries) conversationHistory=conversationHistory.slice(-maxEntries);
+}
+function clearHistory(){ conversationHistory=[]; }
+
+/* ---- local fast-path: a handful of things Blip can answer instantly,
+   offline, with zero API calls — genuinely faster and never fails ---- */
+function tryLocalAnswer(text){
+  const t=text.toLowerCase().trim();
+  const now=new Date();
+  if(/\b(what'?s the time|what time is it|current time)\b/.test(t)){
+    return `it's ${now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}.`;
+  }
+  if(/\b(what'?s the date|what day is it|today'?s date|what'?s today)\b/.test(t)){
+    return `it's ${now.toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'})}.`;
+  }
+  if(/\b(who are you|what are you)\b/.test(t)){
+    return "I'm Blip — your little desk companion.";
+  }
+  if(/^(hi|hello|hey|yo)\b/.test(t) && t.length<15){
+    return "hey! what's up?";
+  }
+  return null;
 }
 
 async function askAI(userText){
-  if(CONFIG.brainProvider==='groq' && !CONFIG.groqApiKey){ say("I need a Groq API key — open the drawer and tap the gear.", 'confused', null); return; }
-  if(CONFIG.brainProvider!=='groq' && !CONFIG.apiKey){ say("I need a Gemini API key — open the drawer and tap the gear.", 'confused', null); return; }
   showActive();
+  const local=tryLocalAnswer(userText);
+  if(local){ say(local, 'happy', null); return; } // handled instantly, no network, no history needed
+
+  if(navigator.onLine===false){
+    say("looks like we're offline right now — I'll need a connection for anything beyond the basics.", 'confused', null);
+    return;
+  }
+  const providersAvailable = { gemini: !!CONFIG.apiKey, groq: !!CONFIG.groqApiKey };
+  if(!providersAvailable.gemini && !providersAvailable.groq){
+    say("I need a Gemini or Groq API key — open the drawer and tap the gear.", 'confused', null);
+    return;
+  }
   setFace('thinking'); statusEl.textContent='thinking...'; bubble.style.display='none'; linkRow.style.display='none';
-  if(CONFIG.brainProvider==='groq') return askGroq(userText);
-  return askGemini(userText);
+  pushHistory('user', userText);
+
+  // Try the preferred brain first; if it fails entirely (quota, outage, etc.)
+  // and the other provider has a key configured, try that one automatically
+  // rather than just erroring out — this is what actually fixes "had to wait
+  // to use it again" instead of adding a slower, weaker local model.
+  const order = CONFIG.brainProvider==='groq' ? ['groq','gemini'] : ['gemini','groq'];
+  let lastErr=null;
+  for(const provider of order){
+    if(!providersAvailable[provider]) continue;
+    try{
+      if(order.indexOf(provider)>0) statusEl.textContent=`switching to ${provider}...`;
+      const parsed = provider==='groq' ? await askGroq(userText) : await askGemini(userText);
+      const clean=cleanReply(parsed.reply) || "hmm, I've got nothing.";
+      pushHistory('bot', clean);
+      say(clean, parsed.emotion, parsed.link);
+      return;
+    }catch(err){ lastErr=err; }
+  }
+  handleAIError(lastErr);
 }
 
 /* ---- speech recognition: one listen attempt with a timeout, shared by every entry point ---- */
@@ -595,9 +680,15 @@ function handleUserUtterance(text){
 }
 
 function manualListen(){
-  toggleDrawer(false);
+  if(appState!=='idle') return; // already mid-conversation — a stray double-tap shouldn't interrupt it
   startConversationTurn();
 }
+let lastBlobTap=0;
+blob.addEventListener('click', ()=>{
+  const now=Date.now();
+  if(now - lastBlobTap < 350){ lastBlobTap=0; manualListen(); }
+  else{ lastBlobTap=now; }
+});
 
 /* ---- always-listening wake word loop ---- */
 const WAKE_WORD='blip';
