@@ -654,13 +654,30 @@ function tryLocalAnswer(text){
 /* Deliberately no retry/backoff here, unlike Gemini/Groq — if the laptop is
    asleep, off, or off-network, we want to find that out fast (5s) and move
    on to cloud fallback, not sit there retrying a dead connection. */
+/* Fire-and-forget: asks Ollama to load the model into memory and keep it
+   there for a while, so the user's first real question doesn't have to eat
+   the cold-load penalty on top of generation time. Errors are ignored —
+   this is a best-effort optimization, not something to surface to the user. */
+function warmUpLocalModel(){
+  if(!CONFIG.localUrl) return;
+  fetch(`${CONFIG.localUrl}/api/generate`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ model: CONFIG.localModel, keep_alive:'30m' })
+  }).catch(()=>{});
+}
+
 async function askLocal(userText){
   const historyMessages=conversationHistory.slice(0,-1).map(h=>({
     role: h.who==='bot' ? 'assistant' : 'user',
     content: h.text
   }));
   const controller=new AbortController();
-  const timeoutId=setTimeout(()=>controller.abort(), 5000);
+  // Local-only mode has nowhere to fall back to, so it's worth waiting out a
+  // cold model load. In normal fallback mode, a long wait here would delay
+  // switching to cloud when the laptop's genuinely off — so fail faster there.
+  const timeoutMs = CONFIG.localOnly ? 25000 : 6000;
+  const timeoutId=setTimeout(()=>controller.abort(), timeoutMs);
   try{
     const res=await fetch(`${CONFIG.localUrl}/api/chat`, {
       method:'POST',
@@ -884,6 +901,7 @@ function saveSettings(){
   document.documentElement.style.setProperty('--wander-speed', CONFIG.paceSecs+'s');
   const wakeOn=document.getElementById('wakeToggle').checked;
   CONFIG.wakeEnabled=wakeOn;
+  warmUpLocalModel();
   saveConfigToStorage();
   closeSettings();
   if(appState==='idle' && !sleeping){ startFloating(); startAmbient(); }
@@ -899,6 +917,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
 async function wakeUp(){
   markInteraction();
   document.documentElement.style.setProperty('--wander-speed', CONFIG.paceSecs+'s');
+  warmUpLocalModel();
   try{ await document.documentElement.requestFullscreen(); }catch(e){}
   try{ if(screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); }catch(e){}
   requestWakeLock();
