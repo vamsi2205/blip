@@ -175,6 +175,10 @@
       <option value="gemini">Gemini (default)</option>
       <option value="groq">Groq (usually much faster to respond)</option>
     </select>
+    <label>Local laptop (Ollama) — tried first automatically when reachable</label>
+    <input id="localUrlInput" type="text" placeholder="https://your-laptop.tailXXXXX.ts.net">
+    <label>Local model tag</label>
+    <input id="localModelInput" type="text" placeholder="llama3.2:3b" value="llama3.2:3b">
     <label>Gemini API key</label>
     <input id="apiKeyInput" type="password" placeholder="AIza...">
     <label>Groq API key (used only if Groq is selected above)</label>
@@ -220,7 +224,8 @@ document.getElementById('paceInput').addEventListener('input', e => document.get
 </script>
 
 <script>
-const DEFAULT_CONFIG = { apiKey:'', groqApiKey:'', brainProvider:'gemini', persona: document.getElementById('personaInput').value, wakeEnabled:true,
+const DEFAULT_CONFIG = { apiKey:'', groqApiKey:'', brainProvider:'gemini', localUrl:'', localModel:'llama3.2:3b',
+  persona: document.getElementById('personaInput').value, wakeEnabled:true,
   stationarySecs:6, paceSecs:4.5, ttsVoice:'Kore', ttsEngine:'local',
   moodDurations:{curious:4, content:5, alert:3, laughing:3, wondering:4, lookaround:4} };
 
@@ -610,39 +615,93 @@ function tryLocalAnswer(text){
   return null;
 }
 
+/* ---- local laptop (Ollama via Tailscale) ---- */
+/* Deliberately no retry/backoff here, unlike Gemini/Groq — if the laptop is
+   asleep, off, or off-network, we want to find that out fast (5s) and move
+   on to cloud fallback, not sit there retrying a dead connection. */
+async function askLocal(userText){
+  const historyMessages=conversationHistory.slice(0,-1).map(h=>({
+    role: h.who==='bot' ? 'assistant' : 'user',
+    content: h.text
+  }));
+  const controller=new AbortController();
+  const timeoutId=setTimeout(()=>controller.abort(), 5000);
+  try{
+    const res=await fetch(`${CONFIG.localUrl}/api/chat`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: CONFIG.localModel,
+        messages:[
+          {role:'system', content: buildSystemPrompt()},
+          ...historyMessages,
+          {role:'user', content: userText}
+        ],
+        stream:false,
+        format:'json'
+      })
+    });
+    if(!res.ok){
+      const errBody=await res.text();
+      console.error('Local (Ollama) API error', res.status, errBody);
+      const err=new Error(`local API ${res.status}: ${errBody.slice(0,150)}`);
+      err.status=res.status;
+      throw err;
+    }
+    const data=await res.json();
+    const raw=data.message?.content || '';
+    try{ return JSON.parse(raw); }
+    catch{
+      console.error('Local model returned unparsable JSON:', raw);
+      const err=new Error('local reply not valid JSON');
+      err.status='parse';
+      throw err;
+    }
+  }finally{
+    clearTimeout(timeoutId);
+  }
+}
+
 async function askAI(userText){
   showActive();
-  const local=tryLocalAnswer(userText);
-  if(local){ say(local, 'happy', null); return; } // handled instantly, no network, no history needed
+  const instantAnswer=tryLocalAnswer(userText);
+  if(instantAnswer){ say(instantAnswer, 'happy', null); return; } // handled instantly, no network, no history needed
 
   if(navigator.onLine===false){
     say("looks like we're offline right now — I'll need a connection for anything beyond the basics.", 'confused', null);
     return;
   }
-  const providersAvailable = { gemini: !!CONFIG.apiKey, groq: !!CONFIG.groqApiKey };
-  if(!providersAvailable.gemini && !providersAvailable.groq){
-    say("I need a Gemini or Groq API key — open the drawer and tap the gear.", 'confused', null);
+  const providersAvailable = { local: !!CONFIG.localUrl, gemini: !!CONFIG.apiKey, groq: !!CONFIG.groqApiKey };
+  if(!providersAvailable.local && !providersAvailable.gemini && !providersAvailable.groq){
+    say("I need a Gemini or Groq API key, or a local laptop URL — open the drawer and tap the gear.", 'confused', null);
     return;
   }
   setFace('thinking'); statusEl.textContent='thinking...'; bubble.style.display='none'; linkRow.style.display='none';
   pushHistory('user', userText);
 
-  // Try the preferred brain first; if it fails entirely (quota, outage, etc.)
-  // and the other provider has a key configured, try that one automatically
-  // rather than just erroring out — this is what actually fixes "had to wait
-  // to use it again" instead of adding a slower, weaker local model.
-  const order = CONFIG.brainProvider==='groq' ? ['groq','gemini'] : ['gemini','groq'];
+  // Local laptop (if configured) goes first — it's meant to be the fast,
+  // free default. If it's unreachable (laptop asleep/off/off-network) or
+  // errors, fall through to whichever cloud provider is preferred, then the
+  // other one — this is what actually handles "laptop off or not reachable".
+  const cloudOrder = CONFIG.brainProvider==='groq' ? ['groq','gemini'] : ['gemini','groq'];
+  const order = providersAvailable.local ? ['local', ...cloudOrder] : cloudOrder;
   let lastErr=null;
   for(const provider of order){
     if(!providersAvailable[provider]) continue;
     try{
       if(order.indexOf(provider)>0) statusEl.textContent=`switching to ${provider}...`;
-      const parsed = provider==='groq' ? await askGroq(userText) : await askGemini(userText);
+      const parsed = provider==='groq' ? await askGroq(userText)
+        : provider==='gemini' ? await askGemini(userText)
+        : await askLocal(userText);
       const clean=cleanReply(parsed.reply) || "hmm, I've got nothing.";
       pushHistory('bot', clean);
       say(clean, parsed.emotion, parsed.link);
       return;
-    }catch(err){ lastErr=err; }
+    }catch(err){
+      console.error(`${provider} failed:`, err);
+      lastErr=err;
+    }
   }
   handleAIError(lastErr);
 }
@@ -731,6 +790,8 @@ function openSettings(){
   markInteraction();
   document.getElementById('apiKeyInput').value=CONFIG.apiKey;
   document.getElementById('groqApiKeyInput').value=CONFIG.groqApiKey;
+  document.getElementById('localUrlInput').value=CONFIG.localUrl;
+  document.getElementById('localModelInput').value=CONFIG.localModel;
   document.getElementById('brainEngineInput').value=CONFIG.brainProvider;
   document.getElementById('wakeToggle').checked=CONFIG.wakeEnabled;
   document.getElementById('voiceInput').value=CONFIG.ttsVoice;
@@ -747,6 +808,8 @@ function closeSettings(){ document.getElementById('modal').style.display='none';
 function saveSettings(){
   CONFIG.apiKey=document.getElementById('apiKeyInput').value.trim();
   CONFIG.groqApiKey=document.getElementById('groqApiKeyInput').value.trim();
+  CONFIG.localUrl=document.getElementById('localUrlInput').value.trim().replace(/\/$/, '');
+  CONFIG.localModel=document.getElementById('localModelInput').value.trim() || 'llama3.2:3b';
   CONFIG.brainProvider=document.getElementById('brainEngineInput').value;
   CONFIG.persona=document.getElementById('personaInput').value.trim();
   CONFIG.ttsVoice=document.getElementById('voiceInput').value;
