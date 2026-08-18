@@ -183,12 +183,16 @@
       <span style="font-size:13px;">Local only — never use cloud, even as fallback</span>
       <input type="checkbox" id="localOnlyToggle" style="width:20px;height:20px;flex-shrink:0;margin-left:10px;">
     </div>
+    <label style="margin-top:14px;">Light bridge URL (WiZ, via the laptop)</label>
+    <input id="lightBridgeUrlInput" type="text" placeholder="https://kv.tail1b8abe.ts.net:8443">
+    <label>Rooms (one per line: <code>name = bulb IP</code>)</label>
+    <textarea id="lightRoomsInput" placeholder="bedroom = 192.168.1.42" style="height:60px;"></textarea>
     <label>Gemini API key</label>
     <input id="apiKeyInput" type="password" placeholder="AIza...">
     <label>Groq API key (used only if Groq is selected above)</label>
     <input id="groqApiKeyInput" type="password" placeholder="gsk_...">
     <label>Personality (system instruction)</label>
-    <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Default to a short, direct answer — one or two sentences — but give a longer, more complete answer whenever the question genuinely needs it (explanations, instructions, anything with real substance). Brevity is the default, not a hard limit. Warm and a little playful, never rambling for its own sake. If the user asks you to open, show, or take them to something, include a "link" field with the best matching URL (use https://gemini.google.com/app for general requests). Otherwise link must be null.</textarea>
+    <textarea id="personaInput">You are Blip, a tiny cheerful desk companion. Default to a short, direct answer — one or two sentences — but give a longer, more complete answer whenever the question genuinely needs it (explanations, instructions, anything with real substance). Brevity is the default, not a hard limit. Warm and a little playful, never rambling for its own sake.</textarea>
     <label>Voice engine</label>
     <select id="ttsEngineInput" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--lav-soft);background:var(--ink);color:#eae7fb;font-size:14px;">
       <option value="local">Phone's built-in voice (instant, free)</option>
@@ -231,6 +235,7 @@ document.getElementById('paceInput').addEventListener('input', e => document.get
 
 <script>
 const DEFAULT_CONFIG = { apiKey:'', groqApiKey:'', brainProvider:'gemini', localUrl:'', localModel:'llama3.2:3b', localOnly:false,
+  lightBridgeUrl:'', lightRooms:{},
   longTermMemory:[],
   persona: document.getElementById('personaInput').value, wakeEnabled:true,
   stationarySecs:6, paceSecs:4.5, ttsVoice:'Kore', ttsEngine:'local',
@@ -357,7 +362,7 @@ function enterSleep(){
   stopAmbient();
   blob.dataset.mood='sleepy';
   stopFloating();
-  clearHistory();
+  pauseWakeLoop(); // screen stays on and visible — just stop actively listening/processing mic audio
   zzzTimer=setInterval(spawnZzz, 2200);
   spawnZzz();
 }
@@ -365,7 +370,11 @@ function exitSleep(){
   sleeping=false;
   stage.classList.remove('sleeping');
   clearInterval(zzzTimer);
-  if(appState==='idle'){ startAmbient(); startFloating(); }
+  if(appState==='idle'){
+    startAmbient();
+    startFloating();
+    if(CONFIG.wakeEnabled) resumeWakeLoopSoon();
+  }
 }
 setInterval(()=>{
   if(appState==='idle' && !sleeping && Date.now()-lastInteraction > 120000) enterSleep();
@@ -377,7 +386,19 @@ function say(text, emotion, link){
   bubble.style.display='block'; bubble.textContent=text;
   statusEl.textContent='';
   setFace(emotion==='confused' ? 'confused' : 'happy');
-  if(link){ linkAnchor.href=link; linkRow.style.display='block'; } else { linkRow.style.display='none'; }
+  if(link){
+    linkAnchor.href=link;
+    let label='open it';
+    try{
+      const host=new URL(link).hostname.replace(/^www\.|^open\.|^mail\./, '');
+      const nice = host.includes('youtube') ? 'YouTube' : host.includes('spotify') ? 'Spotify'
+        : host.includes('wa.me') ? 'WhatsApp' : host.includes('google.com/maps') || link.includes('/maps/') ? 'Maps'
+        : host.includes('mail.google') ? 'Gmail' : host.split('.')[0];
+      label = `open on ${nice}`;
+    }catch(e){}
+    linkAnchor.textContent = label + ' ↗';
+    linkRow.style.display='block';
+  } else { linkRow.style.display='none'; }
 
   let mouthTimer=setInterval(()=>{ mouth.style.height = mouth.style.height==='0.55em' ? '0.26em':'0.55em'; }, 140);
   function finishSpeaking(){
@@ -504,7 +525,7 @@ function handleAIError(err){
   say(msg, 'confused', null);
 }
 
-const JSON_INSTRUCTION=' Always respond ONLY with a JSON object: {"reply": string, "emotion": "happy" or "confused", "link": string or null, "remember": string or null}. Set "remember" to a short fact worth keeping long-term (the user\'s name, a preference, an ongoing project, a recurring detail) ONLY when they just shared something new like that — otherwise null. Don\'t repeat something already listed under "Things you remember". No markdown, no extra text.';
+const JSON_INSTRUCTION=' Always respond ONLY with a JSON object: {"reply": string, "emotion": "happy" or "confused", "link": string or null, "remember": string or null, "light": {"room": string, "command": "on" or "off" or "brightness" or "warm" or "cool", "value": number or null} or null}. Set "remember" to a short fact worth keeping long-term (the user\'s name, a preference, an ongoing project, a recurring detail) ONLY when they just shared something new like that — otherwise null. Don\'t repeat something already listed under "Things you remember". If the user asks to open, play, or search something on a specific app or service, set "link" to the correct official https:// universal link for it — never a custom app://-style scheme, since a universal link opens the app directly if it\'s installed and falls back to the website if not. Examples: YouTube search -> https://www.youtube.com/results?search_query=<url-encoded query>; Spotify search -> https://open.spotify.com/search/<url-encoded query>; WhatsApp -> https://wa.me/<number, digits only>; Google Maps -> https://www.google.com/maps/search/?api=1&query=<url-encoded query>; Gmail compose -> https://mail.google.com/mail/?view=cm&fs=1&to=<email>. For anything else the user asks to open, use the most relevant real https:// URL. Otherwise link must be null. If the user asks to control a light in a room you have a bulb for, set "light" accordingly ("brightness" uses "value" 1-100, others leave "value" null); only use room names you\'ve actually been told about — otherwise light must be null. No markdown, no extra text.';
 
 /* Built fresh each turn (not cached) so "what time is it" gets a real answer
    instead of the model guessing or hedging with a long disclaimer. */
@@ -513,7 +534,23 @@ function buildSystemPrompt(){
   const memoryLine = CONFIG.longTermMemory.length
     ? ` Things you remember about the user: ${CONFIG.longTermMemory.join('; ')}.`
     : '';
-  return `${CONFIG.persona} The current date and time is ${now.toString()}. Use this directly if asked about the time, date, or day — don't say you can't know it.${memoryLine}${JSON_INSTRUCTION}`;
+  // Only worth mentioning when this is effectively a fresh start (no active
+  // thread) — mid-conversation, the message history itself already provides
+  // continuity, so a time-gap comment would just be redundant/odd.
+  let continuityLine='';
+  if(conversationHistory.length===0 && lastSeenAt){
+    const gapHours=(Date.now()-lastSeenAt)/3600000;
+    if(gapHours>=24 && gapHours<20*24){
+      continuityLine=` It's been a few days since you last spoke with the user — a brief, natural acknowledgment is fine, but don't make a big deal of it.`;
+    }else if(gapHours>=3 && gapHours<24){
+      continuityLine=` You spoke with the user a few hours ago — pick up naturally if relevant, no forced reintroduction needed.`;
+    }
+  }
+  const roomNames=Object.keys(CONFIG.lightRooms);
+  const lightLine=roomNames.length
+    ? ` You control lights in these rooms: ${roomNames.join(', ')}.`
+    : '';
+  return `${CONFIG.persona} The current date and time is ${now.toString()}. Use this directly if asked about the time, date, or day — don't say you can't know it.${memoryLine}${continuityLine}${lightLine}${JSON_INSTRUCTION}`;
 }
 
 async function askGemini(userText){
@@ -533,7 +570,17 @@ async function askGemini(userText){
           reply:{type:'STRING'},
           emotion:{type:'STRING', enum:['happy','confused']},
           link:{type:'STRING', nullable:true},
-          remember:{type:'STRING', nullable:true}
+          remember:{type:'STRING', nullable:true},
+          light:{
+            type:'OBJECT',
+            nullable:true,
+            properties:{
+              room:{type:'STRING'},
+              command:{type:'STRING', enum:['on','off','brightness','warm','cool']},
+              value:{type:'NUMBER', nullable:true}
+            },
+            required:['room','command']
+          }
         },
         required:['reply','emotion']
       },
@@ -581,9 +628,19 @@ async function askGroq(userText){
                   reply:{type:'string'},
                   emotion:{type:'string', enum:['happy','confused']},
                   link:{type:['string','null']},
-                  remember:{type:['string','null']}
+                  remember:{type:['string','null']},
+                  light:{
+                    type:['object','null'],
+                    properties:{
+                      room:{type:'string'},
+                      command:{type:'string', enum:['on','off','brightness','warm','cool']},
+                      value:{type:['number','null']}
+                    },
+                    required:['room','command','value'],
+                    additionalProperties:false
+                  }
                 },
-                required:['reply','emotion','link','remember'],
+                required:['reply','emotion','link','remember','light'],
                 additionalProperties:false
               }
             }
@@ -600,16 +657,45 @@ async function askGroq(userText){
 /* ---- conversation memory ---- */
 /* Stored in a provider-neutral shape ({who:'user'|'bot', text}) and converted
    to whatever format Gemini/Groq expect at request time. Capped so a long
-   session doesn't quietly balloon token usage. Cleared on real inactivity
-   sleep — a nap is a natural point for a fresh conversation. */
-let conversationHistory=[];
+   session doesn't quietly balloon token usage.
+
+   Persisted to localStorage (separately from CONFIG) so a refresh or fully
+   closing and reopening the app doesn't wipe an active conversation — that
+   was the actual gap: previously this lived only in a JS variable and was
+   gone the instant the page reloaded, no matter how recent the exchange was.
+
+   A staleness window keeps this from feeling wrong in the other direction:
+   if you haven't talked to Blip in hours, silently forcing the old thread
+   back into context would feel like it never really left off, rather than
+   a fresh, natural re-greeting. */
+const SESSION_KEY='blip_session';
+const HISTORY_STALE_MS=3*60*60*1000; // 3 hours
+function loadSession(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    if(saved && typeof saved.lastSeenAt==='number'){
+      const freshEnough=(Date.now()-saved.lastSeenAt) < HISTORY_STALE_MS;
+      return { history: freshEnough ? (saved.history||[]) : [], lastSeenAt: saved.lastSeenAt };
+    }
+  }catch(e){}
+  return { history: [], lastSeenAt: null };
+}
+function saveSession(){
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify({ history: conversationHistory, lastSeenAt })); }catch(e){}
+}
+const _session=loadSession();
+let conversationHistory=_session.history;
+let lastSeenAt=_session.lastSeenAt; // when a REAL exchange last happened — not touched by clearing the thread
+
 const MAX_HISTORY_TURNS=6;
 function pushHistory(who, text){
   conversationHistory.push({who, text});
   const maxEntries=MAX_HISTORY_TURNS*2;
   if(conversationHistory.length>maxEntries) conversationHistory=conversationHistory.slice(-maxEntries);
+  lastSeenAt=Date.now();
+  saveSession();
 }
-function clearHistory(){ conversationHistory=[]; }
+function clearHistory(){ conversationHistory=[]; saveSession(); } // deliberately leaves lastSeenAt alone
 
 /* ---- crude routing: send genuinely time-sensitive questions to Gemini
    (the only brain wired up with live search) instead of local/Groq, even
@@ -658,6 +744,22 @@ function tryLocalAnswer(text){
    there for a while, so the user's first real question doesn't have to eat
    the cold-load penalty on top of generation time. Errors are ignored —
    this is a best-effort optimization, not something to surface to the user. */
+/* ---- WiZ light bridge ---- */
+/* Fire-and-forget: this is a background device action, not page navigation,
+   so unlike the "open app" links, no tap is needed to trigger it. Errors are
+   logged but not surfaced as a full error response — a light not toggling
+   shouldn't derail the actual conversation reply. */
+function runLightCommand(light){
+  if(!CONFIG.lightBridgeUrl){ console.warn('light command requested but no bridge URL configured:', light); return; }
+  const ip=CONFIG.lightRooms[(light.room||'').toLowerCase()];
+  if(!ip){ console.warn('light command for unknown room:', light.room); return; }
+  fetch(`${CONFIG.lightBridgeUrl}/light/command`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ ip, action: light.command, value: light.value })
+  }).catch(err => console.error('light bridge request failed:', err));
+}
+
 function warmUpLocalModel(){
   if(!CONFIG.localUrl) return;
   fetch(`${CONFIG.localUrl}/api/generate`, {
@@ -771,6 +873,7 @@ async function askAI(userText){
         if(CONFIG.longTermMemory.length>20) CONFIG.longTermMemory=CONFIG.longTermMemory.slice(-20);
         saveConfigToStorage();
       }
+      if(parsed.light) runLightCommand(parsed.light);
       say(clean, parsed.emotion, parsed.link);
       return;
     }catch(err){
@@ -868,6 +971,8 @@ function openSettings(){
   document.getElementById('localUrlInput').value=CONFIG.localUrl;
   document.getElementById('localModelInput').value=CONFIG.localModel;
   document.getElementById('localOnlyToggle').checked=CONFIG.localOnly;
+  document.getElementById('lightBridgeUrlInput').value=CONFIG.lightBridgeUrl;
+  document.getElementById('lightRoomsInput').value=Object.entries(CONFIG.lightRooms).map(([room,ip])=>`${room} = ${ip}`).join('\n');
   document.getElementById('memoryInput').value=CONFIG.longTermMemory.join('\n');
   document.getElementById('brainEngineInput').value=CONFIG.brainProvider;
   document.getElementById('wakeToggle').checked=CONFIG.wakeEnabled;
@@ -888,6 +993,12 @@ function saveSettings(){
   CONFIG.localUrl=document.getElementById('localUrlInput').value.trim().replace(/\/$/, '');
   CONFIG.localModel=document.getElementById('localModelInput').value.trim() || 'llama3.2:3b';
   CONFIG.localOnly=document.getElementById('localOnlyToggle').checked;
+  CONFIG.lightBridgeUrl=document.getElementById('lightBridgeUrlInput').value.trim().replace(/\/$/, '');
+  CONFIG.lightRooms={};
+  document.getElementById('lightRoomsInput').value.split('\n').forEach(line=>{
+    const m=line.match(/^\s*([^=]+?)\s*=\s*(\S+)\s*$/);
+    if(m) CONFIG.lightRooms[m[1].toLowerCase()]=m[2];
+  });
   CONFIG.longTermMemory=document.getElementById('memoryInput').value.split('\n').map(s=>s.trim()).filter(Boolean);
   CONFIG.brainProvider=document.getElementById('brainEngineInput').value;
   CONFIG.persona=document.getElementById('personaInput').value.trim();
