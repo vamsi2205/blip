@@ -179,6 +179,10 @@
     <input id="localUrlInput" type="text" placeholder="https://your-laptop.tailXXXXX.ts.net">
     <label>Local model tag</label>
     <input id="localModelInput" type="text" placeholder="llama3.2:3b" value="llama3.2:3b">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+      <span style="font-size:13px;">Local only — never use cloud, even as fallback</span>
+      <input type="checkbox" id="localOnlyToggle" style="width:20px;height:20px;flex-shrink:0;margin-left:10px;">
+    </div>
     <label>Gemini API key</label>
     <input id="apiKeyInput" type="password" placeholder="AIza...">
     <label>Groq API key (used only if Groq is selected above)</label>
@@ -209,8 +213,10 @@
     <input id="paceInput" type="range" min="1" max="10" step="0.5" value="4.5" style="width:100%;">
     <label style="margin-top:14px;">Expression durations (seconds)</label>
     <div id="moodSliders" style="display:flex;flex-direction:column;gap:8px;"></div>
-    <button id="clearMemoryBtn" onclick="clearHistory(); this.textContent='cleared!'; setTimeout(()=>this.textContent='Clear conversation memory', 1200);"
-      style="margin-top:14px;padding:9px;border-radius:10px;border:1px solid var(--lav-soft);background:transparent;color:var(--fog);font-size:12.5px;cursor:pointer;">Clear conversation memory</button>
+    <label style="margin-top:14px;">What Blip remembers about you (one thing per line — edit or delete freely)</label>
+    <textarea id="memoryInput" style="height:90px;"></textarea>
+    <button id="clearMemoryBtn" onclick="clearHistory(); this.textContent='cleared!'; setTimeout(()=>this.textContent='Clear recent conversation memory', 1200);"
+      style="margin-top:8px;padding:9px;border-radius:10px;border:1px solid var(--lav-soft);background:transparent;color:var(--fog);font-size:12.5px;cursor:pointer;">Clear recent conversation memory</button>
     <div id="modalBtns">
       <button id="closeBtn" onclick="closeSettings()">Cancel</button>
       <button id="saveBtn" onclick="saveSettings()">Save &amp; close</button>
@@ -224,7 +230,8 @@ document.getElementById('paceInput').addEventListener('input', e => document.get
 </script>
 
 <script>
-const DEFAULT_CONFIG = { apiKey:'', groqApiKey:'', brainProvider:'gemini', localUrl:'', localModel:'llama3.2:3b',
+const DEFAULT_CONFIG = { apiKey:'', groqApiKey:'', brainProvider:'gemini', localUrl:'', localModel:'llama3.2:3b', localOnly:false,
+  longTermMemory:[],
   persona: document.getElementById('personaInput').value, wakeEnabled:true,
   stationarySecs:6, paceSecs:4.5, ttsVoice:'Kore', ttsEngine:'local',
   moodDurations:{curious:4, content:5, alert:3, laughing:3, wondering:4, lookaround:4} };
@@ -488,19 +495,25 @@ async function requestWithRetry(models, buildRequest, extractText){
 
 function handleAIError(err){
   console.error('AI request failed after retries:', err);
-  const msg = err?.status===503 ? "the model's pretty busy right now — try again in a moment."
+  const isLocalConnFailure = err?.name==='AbortError' || /failed to fetch|networkerror/i.test(String(err?.message||''));
+  const msg = CONFIG.localOnly && isLocalConnFailure
+    ? "can't reach the laptop right now — check it's awake, Ollama's running, and Tailscale is connected."
+    : err?.status===503 ? "the model's pretty busy right now — try again in a moment."
     : err?.status==='parse' ? "that reply got cut off — try asking again."
     : `something went wrong: ${String(err?.message||err).slice(0,150)}`;
   say(msg, 'confused', null);
 }
 
-const JSON_INSTRUCTION=' Always respond ONLY with a JSON object: {"reply": string, "emotion": "happy" or "confused", "link": string or null}. No markdown, no extra text.';
+const JSON_INSTRUCTION=' Always respond ONLY with a JSON object: {"reply": string, "emotion": "happy" or "confused", "link": string or null, "remember": string or null}. Set "remember" to a short fact worth keeping long-term (the user\'s name, a preference, an ongoing project, a recurring detail) ONLY when they just shared something new like that — otherwise null. Don\'t repeat something already listed under "Things you remember". No markdown, no extra text.';
 
 /* Built fresh each turn (not cached) so "what time is it" gets a real answer
    instead of the model guessing or hedging with a long disclaimer. */
 function buildSystemPrompt(){
   const now=new Date();
-  return `${CONFIG.persona} The current date and time is ${now.toString()}. Use this directly if asked about the time, date, or day — don't say you can't know it.${JSON_INSTRUCTION}`;
+  const memoryLine = CONFIG.longTermMemory.length
+    ? ` Things you remember about the user: ${CONFIG.longTermMemory.join('; ')}.`
+    : '';
+  return `${CONFIG.persona} The current date and time is ${now.toString()}. Use this directly if asked about the time, date, or day — don't say you can't know it.${memoryLine}${JSON_INSTRUCTION}`;
 }
 
 async function askGemini(userText){
@@ -511,6 +524,7 @@ async function askGemini(userText){
   const body={
     systemInstruction:{parts:[{text: buildSystemPrompt()}]},
     contents:[...historyContents, {role:'user', parts:[{text:userText}]}],
+    tools:[{google_search:{}}],
     generationConfig:{
       responseMimeType:'application/json',
       responseSchema:{
@@ -518,7 +532,8 @@ async function askGemini(userText){
         properties:{
           reply:{type:'STRING'},
           emotion:{type:'STRING', enum:['happy','confused']},
-          link:{type:'STRING', nullable:true}
+          link:{type:'STRING', nullable:true},
+          remember:{type:'STRING', nullable:true}
         },
         required:['reply','emotion']
       },
@@ -565,9 +580,10 @@ async function askGroq(userText){
                 properties:{
                   reply:{type:'string'},
                   emotion:{type:'string', enum:['happy','confused']},
-                  link:{type:['string','null']}
+                  link:{type:['string','null']},
+                  remember:{type:['string','null']}
                 },
-                required:['reply','emotion','link'],
+                required:['reply','emotion','link','remember'],
                 additionalProperties:false
               }
             }
@@ -594,6 +610,25 @@ function pushHistory(who, text){
   if(conversationHistory.length>maxEntries) conversationHistory=conversationHistory.slice(-maxEntries);
 }
 function clearHistory(){ conversationHistory=[]; }
+
+/* ---- crude routing: send genuinely time-sensitive questions to Gemini
+   (the only brain wired up with live search) instead of local/Groq, even
+   when local is the preferred default. This is a blunt keyword heuristic —
+   it will misfire sometimes — but it's a real improvement over never
+   routing to search at all. */
+function needsWebInfo(text){
+  const t=text.toLowerCase();
+  const patterns=[
+    /\b(today|tonight|this week|this weekend|right now|currently)\b/,
+    /\b(latest|recent|breaking|just (happened|announced|released))\b/,
+    /\b(news|headlines)\b/,
+    /\b(score|who won|result of|standings)\b/,
+    /\b(weather|forecast)\b/,
+    /\b(stock price|share price|exchange rate|price of)\b/,
+    /\b(search for|look up|google (it|that|this))\b/
+  ];
+  return patterns.some(p=>p.test(t));
+}
 
 /* ---- local fast-path: a handful of things Blip can answer instantly,
    offline, with zero API calls — genuinely faster and never fails ---- */
@@ -673,6 +708,10 @@ async function askAI(userText){
     return;
   }
   const providersAvailable = { local: !!CONFIG.localUrl, gemini: !!CONFIG.apiKey, groq: !!CONFIG.groqApiKey };
+  if(CONFIG.localOnly && !providersAvailable.local){
+    say("Local-only mode is on, but there's no laptop URL set — add one in settings, or turn local-only off.", 'confused', null);
+    return;
+  }
   if(!providersAvailable.local && !providersAvailable.gemini && !providersAvailable.groq){
     say("I need a Gemini or Groq API key, or a local laptop URL — open the drawer and tap the gear.", 'confused', null);
     return;
@@ -684,8 +723,22 @@ async function askAI(userText){
   // free default. If it's unreachable (laptop asleep/off/off-network) or
   // errors, fall through to whichever cloud provider is preferred, then the
   // other one — this is what actually handles "laptop off or not reachable".
-  const cloudOrder = CONFIG.brainProvider==='groq' ? ['groq','gemini'] : ['gemini','groq'];
-  const order = providersAvailable.local ? ['local', ...cloudOrder] : cloudOrder;
+  // Local-only mode skips all of that: it's local or nothing, on purpose —
+  // no silent fallback to cloud, and no web-search override either, since
+  // that only exists on the cloud brains.
+  let order;
+  if(CONFIG.localOnly){
+    order = ['local'];
+  }else{
+    const cloudOrder = CONFIG.brainProvider==='groq' ? ['groq','gemini'] : ['gemini','groq'];
+    order = providersAvailable.local ? ['local', ...cloudOrder] : cloudOrder;
+    if(needsWebInfo(userText) && providersAvailable.gemini){
+      // Only Gemini has live search wired up, so a time-sensitive question
+      // skips straight to it regardless of whether local/Groq would
+      // normally go first.
+      order = ['gemini', ...order.filter(p=>p!=='gemini')];
+    }
+  }
   let lastErr=null;
   for(const provider of order){
     if(!providersAvailable[provider]) continue;
@@ -696,6 +749,11 @@ async function askAI(userText){
         : await askLocal(userText);
       const clean=cleanReply(parsed.reply) || "hmm, I've got nothing.";
       pushHistory('bot', clean);
+      if(parsed.remember && !CONFIG.longTermMemory.includes(parsed.remember)){
+        CONFIG.longTermMemory.push(parsed.remember);
+        if(CONFIG.longTermMemory.length>20) CONFIG.longTermMemory=CONFIG.longTermMemory.slice(-20);
+        saveConfigToStorage();
+      }
       say(clean, parsed.emotion, parsed.link);
       return;
     }catch(err){
@@ -792,6 +850,8 @@ function openSettings(){
   document.getElementById('groqApiKeyInput').value=CONFIG.groqApiKey;
   document.getElementById('localUrlInput').value=CONFIG.localUrl;
   document.getElementById('localModelInput').value=CONFIG.localModel;
+  document.getElementById('localOnlyToggle').checked=CONFIG.localOnly;
+  document.getElementById('memoryInput').value=CONFIG.longTermMemory.join('\n');
   document.getElementById('brainEngineInput').value=CONFIG.brainProvider;
   document.getElementById('wakeToggle').checked=CONFIG.wakeEnabled;
   document.getElementById('voiceInput').value=CONFIG.ttsVoice;
@@ -810,6 +870,8 @@ function saveSettings(){
   CONFIG.groqApiKey=document.getElementById('groqApiKeyInput').value.trim();
   CONFIG.localUrl=document.getElementById('localUrlInput').value.trim().replace(/\/$/, '');
   CONFIG.localModel=document.getElementById('localModelInput').value.trim() || 'llama3.2:3b';
+  CONFIG.localOnly=document.getElementById('localOnlyToggle').checked;
+  CONFIG.longTermMemory=document.getElementById('memoryInput').value.split('\n').map(s=>s.trim()).filter(Boolean);
   CONFIG.brainProvider=document.getElementById('brainEngineInput').value;
   CONFIG.persona=document.getElementById('personaInput').value.trim();
   CONFIG.ttsVoice=document.getElementById('voiceInput').value;
